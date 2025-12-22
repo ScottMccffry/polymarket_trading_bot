@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Strategies - Polymarket Bot{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <h2 class="text-xl font-semibold mb-4">Trading Strategies</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for strategy in strategies %}
+            <div class="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="font-semibold text-lg">{{ strategy.name }}</h3>
+                        <p class="text-gray-400 text-sm mt-1">{{ strategy.description }}</p>
+                    </div>
+                    <span class="px-2 py-1 rounded text-xs {% if strategy.enabled %}bg-green-900 text-green-300{% else %}bg-gray-600 text-gray-400{% endif %}">
+                        {% if strategy.enabled %}Enabled{% else %}Disabled{% endif %}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <h2 class="text-xl font-semibold mb-4">Strategy Parameters</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-700">
+                <thead>
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Strategy</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Take Profit</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Stop Loss</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Notes</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-700">
+                    <tr>
+                        <td class="px-4 py-3 text-sm font-medium">General</td>
+                        <td class="px-4 py-3 text-sm text-green-400">+50%</td>
+                        <td class="px-4 py-3 text-sm text-red-400">-25%</td>
+                        <td class="px-4 py-3 text-sm text-gray-400">Balanced approach</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 text-sm font-medium">Conservative</td>
+                        <td class="px-4 py-3 text-sm text-green-400">+25%</td>
+                        <td class="px-4 py-3 text-sm text-red-400">-15%</td>
+                        <td class="px-4 py-3 text-sm text-gray-400">Lower risk, quicker exits</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 text-sm font-medium">Aggressive</td>
+                        <td class="px-4 py-3 text-sm text-green-400">+100%</td>
+                        <td class="px-4 py-3 text-sm text-red-400">-40%</td>
+                        <td class="px-4 py-3 text-sm text-gray-400">High risk/reward</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 text-sm font-medium">Trailing Stop</td>
+                        <td class="px-4 py-3 text-sm text-green-400">N/A</td>
+                        <td class="px-4 py-3 text-sm text-red-400">-20% trail</td>
+                        <td class="px-4 py-3 text-sm text-gray-400">Trails from peak price</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
