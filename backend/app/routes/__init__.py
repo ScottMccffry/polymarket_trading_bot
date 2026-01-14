@@ -1,0 +1,8 @@
+from .auth import router as auth_router
+from .signals import router as signals_router
+from .strategies import router as strategies_router
+from .positions import router as positions_router
+from .markets import router as markets_router
+from .telegram import router as telegram_router
+from .settings import router as settings_router
+from .bot import router as bot_router

@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --no-import-alias --use-npm)",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run build:*)",
+      "mcp__shadcn__get_project_registries",
+      "mcp__shadcn__get_add_command_for_items",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npm install:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.polymarket.com)",
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "mcp__shadcn__search_items_in_registries",
+      "Bash(python seed_data.py:*)",
+      "Bash(curl:*)",
+      "Bash(xargs cat:*)",
+      "Bash(npx tsc:*)",
+      "Bash(source venv/bin/activate)",
+      "Bash(uvicorn:*)",
+      "Bash(chmod:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(pkill:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(git -C /Users/armandfatalot/polymarket_trading_bot log --oneline -20)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "shadcn"
+  ]
+}
