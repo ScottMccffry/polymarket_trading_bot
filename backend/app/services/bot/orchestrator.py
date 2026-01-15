@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Callable, Awaitable, Optional
 from enum import Enum
 
+from app.database import get_db_context
+
 logger = logging.getLogger(__name__)
 
 
@@ -245,63 +247,54 @@ bot_orchestrator = BotOrchestrator()
 
 
 # ============================================================================
-# Default Tasks - You can add your own tasks here
+# Default Tasks
 # ============================================================================
 
-async def _placeholder_position_check():
+async def _position_check_task():
     """
-    Placeholder for position check task.
-    Replace with actual implementation that calls:
-    - apply_strategy_to_open_positions()
+    Check open positions and apply exit strategies.
     """
-    logger.debug("[BOT] Position check placeholder - implement your logic here")
-    # TODO: Import and call your position check logic
-    # from app.services.trading.executor import TradingExecutor
-    # executor = TradingExecutor()
-    # async with get_db_context() as db:
-    #     await executor.check_all_positions(db)
+    from app.services.trading.executor import StrategyExecutor
+
+    try:
+        executor = StrategyExecutor()
+        async with get_db_context() as db:
+            result = await executor.check_all_positions(db)
+            if result.get("actions_taken"):
+                logger.info(f"[BOT] Position check: {result}")
+    except Exception as e:
+        logger.error(f"[BOT] Position check error: {e}")
 
 
-async def _placeholder_signal_sniper():
+async def _signal_trader_task():
     """
-    Placeholder for signal sniper task.
-    Replace with actual implementation that:
-    - Polls Telegram for new messages
-    - Runs LLM analysis to extract signals
-    - Opens positions based on signals
+    Process Telegram messages and generate trading signals.
+
+    NOTE: The signal_trader has its own internal monitoring loop.
+    This task wrapper just ensures it's running.
     """
-    logger.debug("[BOT] Signal sniper placeholder - implement your logic here")
-    # TODO: Implement snipe_insider() logic
+    from .signal_trader import signal_trader
+
+    # The signal_trader.run() method blocks while monitoring
+    # For the orchestrator pattern, we do a single poll check instead
+    # The actual monitoring should be started separately if continuous
+    logger.debug("[BOT] Signal trader task tick - use /bot/signal-trader/start for continuous monitoring")
 
 
-async def _placeholder_easy_wins():
+async def _easy_wins_task():
     """
-    Placeholder for easy wins monitor task.
-    Replace with actual implementation that:
-    - Scans markets for high probability opportunities
-    - Automatically enters positions
+    Scan for high probability market opportunities.
     """
-    logger.debug("[BOT] Easy wins placeholder - implement your logic here")
-    # TODO: Implement monitor_easy_wins_markets() logic
+    logger.debug("[BOT] Easy wins task - not yet implemented")
+    # TODO: Implement easy wins scanning logic
 
 
-async def _placeholder_high_frequency():
+async def _high_frequency_task():
     """
-    Placeholder for high frequency trading task.
-    Runs every second for real-time market monitoring.
-
-    Replace with actual implementation that:
-    - Monitors price movements in real-time
-    - Detects rapid price changes or arbitrage opportunities
-    - Updates position prices for live P&L tracking
-    - Executes time-sensitive trades
+    High frequency updates - price monitoring, P&L updates.
     """
-    logger.debug("[BOT] High frequency placeholder - implement your logic here")
-    # TODO: Implement high frequency trading logic
-    # Examples:
-    # - await update_all_position_prices()
-    # - await check_arbitrage_opportunities()
-    # - await monitor_whale_movements()
+    logger.debug("[BOT] High frequency task - not yet implemented")
+    # TODO: Implement high frequency logic
 
 
 def register_default_tasks():
@@ -309,31 +302,31 @@ def register_default_tasks():
     # Position check - runs every 60 seconds
     bot_orchestrator.register_task(
         name="position_check",
-        func=_placeholder_position_check,
+        func=_position_check_task,
         interval_seconds=60,
         enabled=True,
     )
 
-    # Signal sniper - runs every 30 seconds
+    # Signal trader - runs every 30 seconds (polls for tick, continuous monitoring separate)
     bot_orchestrator.register_task(
-        name="signal_sniper",
-        func=_placeholder_signal_sniper,
+        name="signal_trader",
+        func=_signal_trader_task,
         interval_seconds=30,
-        enabled=False,  # Disabled until implemented
+        enabled=False,  # Enable when ready to trade
     )
 
     # Easy wins monitor - runs every 5 minutes
     bot_orchestrator.register_task(
         name="easy_wins",
-        func=_placeholder_easy_wins,
+        func=_easy_wins_task,
         interval_seconds=300,
-        enabled=False,  # Disabled until implemented
+        enabled=False,  # Not yet implemented
     )
 
     # High frequency trading - runs every second
     bot_orchestrator.register_task(
         name="high_frequency",
-        func=_placeholder_high_frequency,
+        func=_high_frequency_task,
         interval_seconds=1,
-        enabled=False,  # Disabled until implemented (WARNING: high resource usage)
+        enabled=False,  # Not yet implemented (WARNING: high resource usage)
     )

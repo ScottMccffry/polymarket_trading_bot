@@ -9,6 +9,8 @@ from .strategies import (
 )
 from .simulation import SimulationEngine, SimulationState
 from .executor import StrategyExecutor
+from .signal_generator import SignalGenerator, signal_generator
+from .position_manager import PositionManager, position_manager
 
 __all__ = [
     "ExitStrategy",
@@ -20,4 +22,8 @@ __all__ = [
     "SimulationEngine",
     "SimulationState",
     "StrategyExecutor",
+    "SignalGenerator",
+    "signal_generator",
+    "PositionManager",
+    "position_manager",
 ]

@@ -290,6 +290,29 @@ export interface QdrantStatus {
   status?: string;
 }
 
+export interface SignalTestRequest {
+  message: string;
+  source?: string;
+}
+
+export interface SignalTestResult {
+  market_question: string;
+  market_id: string;
+  similarity_score: number;
+  direction: string;
+  confidence: number;
+  relevance_score: number;
+  reasoning: string;
+  message_type: string;
+}
+
+export interface SignalTestResponse {
+  message: string;
+  markets_found: number;
+  signals_generated: number;
+  signals: SignalTestResult[];
+}
+
 export interface PriceHistoryPoint {
   t: number;
   p: string;
@@ -676,6 +699,14 @@ class ApiClient {
   async embedMarkets(): Promise<{ message: string; count: number }> {
     return this.request<{ message: string; count: number }>("/api/markets/qdrant/embed", {
       method: "POST",
+    });
+  }
+
+  // Signal Testing
+  async testSignal(message: string, source: string = "test"): Promise<SignalTestResponse> {
+    return this.request<SignalTestResponse>("/api/bot/signal-trader/test", {
+      method: "POST",
+      body: JSON.stringify({ message, source }),
     });
   }
 }

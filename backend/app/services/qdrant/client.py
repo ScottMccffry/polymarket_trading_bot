@@ -1,6 +1,8 @@
 """Qdrant vector database service for semantic market search."""
 import hashlib
+import json
 import logging
+from pathlib import Path
 
 from openai import OpenAI
 from qdrant_client import QdrantClient
@@ -11,6 +13,27 @@ from ...config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
+# Settings file path (same as in routes/settings.py)
+SETTINGS_FILE = Path("data/settings.json")
+
+
+def _load_saved_settings() -> dict:
+    """Load settings from JSON file."""
+    if SETTINGS_FILE.exists():
+        try:
+            with open(SETTINGS_FILE) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {}
+    return {}
+
+
+def _get_effective_setting(key: str, env_settings: Settings, saved: dict) -> str:
+    """Get effective setting value, preferring saved over env."""
+    if key in saved and saved[key]:
+        return saved[key]
+    return getattr(env_settings, key, "") or ""
+
 
 class QdrantService:
     """Service for vector-based market search using Qdrant."""
@@ -18,8 +41,15 @@ class QdrantService:
     VECTOR_SIZE = 1536  # text-embedding-3-small dimension
 
     def __init__(self, settings: Settings | None = None):
-        self.settings = settings or get_settings()
-        self.collection_name = self.settings.qdrant_collection_name
+        self.env_settings = settings or get_settings()
+        self._saved_settings = _load_saved_settings()
+
+        # Get effective settings (saved > env)
+        self.qdrant_url = _get_effective_setting("qdrant_url", self.env_settings, self._saved_settings)
+        self.qdrant_api_key = _get_effective_setting("qdrant_api_key", self.env_settings, self._saved_settings)
+        self.openai_api_key = _get_effective_setting("openai_api_key", self.env_settings, self._saved_settings)
+        self.collection_name = _get_effective_setting("qdrant_collection_name", self.env_settings, self._saved_settings) or "polymarket_markets"
+
         self._client: QdrantClient | None = None
         self._openai: OpenAI | None = None
 
@@ -27,11 +57,11 @@ class QdrantService:
     def client(self) -> QdrantClient:
         """Lazy-initialize Qdrant client."""
         if self._client is None:
-            if not self.settings.qdrant_url:
+            if not self.qdrant_url:
                 raise ValueError("QDRANT_URL not configured")
             self._client = QdrantClient(
-                url=self.settings.qdrant_url,
-                api_key=self.settings.qdrant_api_key or None,
+                url=self.qdrant_url,
+                api_key=self.qdrant_api_key or None,
             )
             self._ensure_collection()
         return self._client
@@ -40,9 +70,9 @@ class QdrantService:
     def openai(self) -> OpenAI:
         """Lazy-initialize OpenAI client."""
         if self._openai is None:
-            if not self.settings.openai_api_key:
+            if not self.openai_api_key:
                 raise ValueError("OPENAI_API_KEY not configured")
-            self._openai = OpenAI(api_key=self.settings.openai_api_key)
+            self._openai = OpenAI(api_key=self.openai_api_key)
         return self._openai
 
     def _ensure_collection(self):
@@ -227,4 +257,4 @@ class QdrantService:
 
     def is_configured(self) -> bool:
         """Check if Qdrant and OpenAI are configured."""
-        return bool(self.settings.qdrant_url and self.settings.openai_api_key)
+        return bool(self.qdrant_url and self.openai_api_key)

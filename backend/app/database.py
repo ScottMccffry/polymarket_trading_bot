@@ -26,6 +26,24 @@ async def get_db():
         yield session
 
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def get_db_context():
+    """
+    Context manager for database sessions.
+
+    Usage:
+        async with get_db_context() as db:
+            result = await db.execute(...)
+    """
+    async with async_session() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

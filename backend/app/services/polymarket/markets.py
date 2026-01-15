@@ -81,6 +81,10 @@ class MarketHarvester:
             )
             existing = result.scalar_one_or_none()
 
+            # Parse liquidity and volume as floats (API may return strings)
+            liquidity = float(m.get("liquidity") or 0)
+            volume = float(m.get("volume") or 0)
+
             if existing:
                 # Update existing market
                 existing.question = m.get("question")
@@ -88,8 +92,8 @@ class MarketHarvester:
                 existing.market_slug = m.get("slug")
                 existing.end_date_iso = m.get("endDate")
                 existing.clob_token_ids = token_ids_str
-                existing.liquidity = m.get("liquidity", 0)
-                existing.volume = m.get("volume", 0)
+                existing.liquidity = liquidity
+                existing.volume = volume
                 existing.category = m.get("category")
                 existing.active = 1 if m.get("active", True) else 0
                 existing.closed = 1 if m.get("closed", False) else 0
@@ -103,8 +107,8 @@ class MarketHarvester:
                     market_slug=m.get("slug"),
                     end_date_iso=m.get("endDate"),
                     clob_token_ids=token_ids_str,
-                    liquidity=m.get("liquidity", 0),
-                    volume=m.get("volume", 0),
+                    liquidity=liquidity,
+                    volume=volume,
                     category=m.get("category"),
                     active=1 if m.get("active", True) else 0,
                     closed=1 if m.get("closed", False) else 0,

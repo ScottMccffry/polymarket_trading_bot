@@ -7,10 +7,12 @@ import {
   LLMSettings,
   QdrantSettings,
   QdrantStatus,
+  SignalTestResponse,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -32,7 +34,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ArrowUp, ArrowDown, Minus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ConfigSectionProps {
@@ -107,6 +109,12 @@ export default function Settings() {
   const [qdrantMessage, setQdrantMessage] = useState("");
   const [qdrantStatus, setQdrantStatus] = useState<QdrantStatus | null>(null);
   const [qdrantSyncing, setQdrantSyncing] = useState(false);
+
+  // Signal simulation state
+  const [simulationMessage, setSimulationMessage] = useState("");
+  const [simulationLoading, setSimulationLoading] = useState(false);
+  const [simulationResult, setSimulationResult] = useState<SignalTestResponse | null>(null);
+  const [simulationError, setSimulationError] = useState("");
 
   // Load settings on mount
   useEffect(() => {
@@ -221,6 +229,26 @@ export default function Settings() {
       setQdrantMessage(`Error: ${error}`);
     } finally {
       setQdrantSyncing(false);
+    }
+  };
+
+  const runSignalSimulation = async () => {
+    if (!simulationMessage.trim()) {
+      setSimulationError("Please enter a message to simulate");
+      return;
+    }
+
+    setSimulationLoading(true);
+    setSimulationError("");
+    setSimulationResult(null);
+
+    try {
+      const result = await api.testSignal(simulationMessage, "simulation");
+      setSimulationResult(result);
+    } catch (error) {
+      setSimulationError(`Error: ${error}`);
+    } finally {
+      setSimulationLoading(false);
     }
   };
 
@@ -519,6 +547,138 @@ export default function Settings() {
                   placeholder="5"
                 />
               </div>
+            </div>
+          </ConfigSection>
+
+          {/* Signal Simulation */}
+          <ConfigSection
+            title="Signal Simulation"
+            description="Test if a message creates a signal"
+            defaultOpen
+          >
+            <CardDescription className="mb-4">
+              Enter a message to simulate how the signal trader would process it.
+              This searches Qdrant for matching markets and analyzes them with the LLM.
+            </CardDescription>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="simulation-message">Message to Simulate</Label>
+                <Textarea
+                  id="simulation-message"
+                  value={simulationMessage}
+                  onChange={(e) => setSimulationMessage(e.target.value)}
+                  placeholder="Enter a message like you would see in a Telegram group... e.g., 'Breaking: Trump announces new tariffs on China'"
+                  rows={4}
+                />
+              </div>
+
+              <div className="flex items-center gap-4">
+                <Button
+                  onClick={runSignalSimulation}
+                  disabled={simulationLoading || !simulationMessage.trim()}
+                >
+                  {simulationLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    "Run Simulation"
+                  )}
+                </Button>
+                {simulationError && (
+                  <span className="text-sm text-destructive">{simulationError}</span>
+                )}
+              </div>
+
+              {/* Results */}
+              {simulationResult && (
+                <div className="mt-6 space-y-4">
+                  <Separator />
+                  <div className="flex items-center gap-4">
+                    <Badge variant="outline">
+                      Markets Found: {simulationResult.markets_found}
+                    </Badge>
+                    <Badge
+                      variant={simulationResult.signals_generated > 0 ? "default" : "secondary"}
+                    >
+                      Signals Generated: {simulationResult.signals_generated}
+                    </Badge>
+                  </div>
+
+                  {simulationResult.signals.length === 0 ? (
+                    <Card className="bg-muted/50">
+                      <CardContent className="pt-6">
+                        <p className="text-sm text-muted-foreground">
+                          No actionable signals were generated from this message.
+                          {simulationResult.markets_found > 0
+                            ? " Markets were found but none met the confidence threshold (70%)."
+                            : " No matching markets were found in the vector database."}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm">Generated Signals:</h4>
+                      {simulationResult.signals.map((signal, index) => (
+                        <Card key={index} className="bg-muted/50">
+                          <CardContent className="pt-4 space-y-3">
+                            <div className="flex items-start justify-between gap-4">
+                              <p className="text-sm font-medium flex-1">
+                                {signal.market_question}
+                              </p>
+                              <Badge
+                                variant={signal.direction === "BUY" ? "default" : "destructive"}
+                                className="flex items-center gap-1"
+                              >
+                                {signal.direction === "BUY" ? (
+                                  <ArrowUp className="h-3 w-3" />
+                                ) : signal.direction === "SELL" ? (
+                                  <ArrowDown className="h-3 w-3" />
+                                ) : (
+                                  <Minus className="h-3 w-3" />
+                                )}
+                                {signal.direction}
+                              </Badge>
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                              <div>
+                                <span className="text-muted-foreground">Confidence:</span>
+                                <span className="ml-1 font-medium">
+                                  {(signal.confidence * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Relevance:</span>
+                                <span className="ml-1 font-medium">
+                                  {(signal.relevance_score * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Similarity:</span>
+                                <span className="ml-1 font-medium">
+                                  {(signal.similarity_score * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Type:</span>
+                                <span className="ml-1 font-medium capitalize">
+                                  {signal.message_type.replace(/_/g, " ")}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="text-xs text-muted-foreground bg-background/50 p-2 rounded">
+                              <span className="font-medium">Reasoning:</span> {signal.reasoning}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </ConfigSection>
         </div>

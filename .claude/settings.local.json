@@ -30,7 +30,13 @@
       "Bash(pkill:*)",
       "Bash(ls:*)",
       "Bash(cat:*)",
-      "Bash(git -C /Users/armandfatalot/polymarket_trading_bot log --oneline -20)"
+      "Bash(git -C /Users/armandfatalot/polymarket_trading_bot log --oneline -20)",
+      "Bash(railway logs:*)",
+      "Bash(railway service:*)",
+      "Bash(railway status:*)",
+      "Bash(python:*)",
+      "Bash(railway up:*)",
+      "Bash(timeout 5 python:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
