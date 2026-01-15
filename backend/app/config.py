@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     database_url: str = "sqlite+aiosqlite:///./app.db"
 
+    # Admin credentials
+    default_admin_email: str = ""
+    default_admin_password: str = ""
+
     # CORS - comma-separated list of allowed origins
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
 

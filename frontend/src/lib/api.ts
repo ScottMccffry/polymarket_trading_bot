@@ -709,6 +709,123 @@ class ApiClient {
       body: JSON.stringify({ message, source }),
     });
   }
+
+  // Telegram
+  async getTelegramStatus(): Promise<{ configured: boolean; authenticated: boolean; phone?: string }> {
+    return this.request("/api/telegram/status");
+  }
+
+  async connectTelegram(): Promise<{ success: boolean; message?: string; error?: string }> {
+    return this.request("/api/telegram/connect", { method: "POST" });
+  }
+
+  async verifyTelegram(code: string, password?: string): Promise<{ success: boolean; error?: string; needs_2fa?: boolean }> {
+    return this.request("/api/telegram/verify", {
+      method: "POST",
+      body: JSON.stringify({ code, password }),
+    });
+  }
+
+  async disconnectTelegram(): Promise<{ success: boolean }> {
+    return this.request("/api/telegram/disconnect", { method: "POST" });
+  }
+
+  async getTelegramGroups(): Promise<{ groups: string[] }> {
+    return this.request("/api/telegram/groups");
+  }
+
+  async getTelegramMessages(group: string, limit: number = 10): Promise<{
+    group: string;
+    messages: Array<{
+      message_id: number;
+      chat_title: string;
+      text: string;
+      timestamp: string;
+    }>;
+  }> {
+    return this.request(`/api/telegram/messages/${encodeURIComponent(group)}?limit=${limit}`);
+  }
+
+  // Sources
+  async getSources(type?: string, enabledOnly?: boolean): Promise<Array<{
+    id: number;
+    name: string;
+    type: string;
+    enabled: boolean;
+    config: Record<string, unknown> | null;
+    created_at: string;
+    updated_at: string;
+  }>> {
+    const params = new URLSearchParams();
+    if (type) params.append("type", type);
+    if (enabledOnly) params.append("enabled_only", "true");
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return this.request(`/api/sources${query}`);
+  }
+
+  async getSource(id: number): Promise<{
+    id: number;
+    name: string;
+    type: string;
+    enabled: boolean;
+    config: Record<string, unknown> | null;
+    created_at: string;
+    updated_at: string;
+  }> {
+    return this.request(`/api/sources/${id}`);
+  }
+
+  async createSource(data: {
+    name: string;
+    type: string;
+    enabled?: boolean;
+    config?: Record<string, unknown>;
+  }): Promise<{
+    id: number;
+    name: string;
+    type: string;
+    enabled: boolean;
+    config: Record<string, unknown> | null;
+    created_at: string;
+    updated_at: string;
+  }> {
+    return this.request("/api/sources", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSource(id: number, data: {
+    name?: string;
+    type?: string;
+    enabled?: boolean;
+    config?: Record<string, unknown>;
+  }): Promise<{
+    id: number;
+    name: string;
+    type: string;
+    enabled: boolean;
+    config: Record<string, unknown> | null;
+    created_at: string;
+    updated_at: string;
+  }> {
+    return this.request(`/api/sources/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSource(id: number): Promise<{ message: string }> {
+    return this.request(`/api/sources/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  async toggleSource(id: number): Promise<{ id: number; enabled: boolean }> {
+    return this.request(`/api/sources/${id}/toggle`, {
+      method: "PATCH",
+    });
+  }
 }
 
 export const api = new ApiClient(API_URL);

@@ -20,7 +20,7 @@ from app.config import get_settings
 settings = get_settings()
 
 
-async def create_user(email: str, password: str):
+async def create_user(email: "admin@example.com", password: "admin123"):
     """Create a new user."""
     # Handle database URL conversion for async
     database_url = settings.database_url
@@ -57,18 +57,4 @@ async def create_user(email: str, password: str):
 
 
 if __name__ == "__main__":
-    # Check command line args first
-    if len(sys.argv) == 3:
-        email = sys.argv[1]
-        password = sys.argv[2]
-    # Fall back to environment variables
-    elif os.environ.get("DEFAULT_ADMIN_EMAIL") and os.environ.get("DEFAULT_ADMIN_PASSWORD"):
-        email = os.environ["DEFAULT_ADMIN_EMAIL"]
-        password = os.environ["DEFAULT_ADMIN_PASSWORD"]
-    else:
-        print("Usage: python create_user.py <email> <password>")
-        print("Or set DEFAULT_ADMIN_EMAIL and DEFAULT_ADMIN_PASSWORD env vars")
-        print("\nExample: python create_user.py admin@example.com mypassword123")
-        sys.exit(1)
-
-    asyncio.run(create_user(email, password))
+    asyncio.run(create_user("admin@example.com", "admin123"))

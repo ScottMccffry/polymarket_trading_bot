@@ -94,7 +94,7 @@ class QdrantService:
         """Get embedding vector for text using OpenAI."""
         text = text[:30000]  # Truncate to avoid token limits
         response = self.openai.embeddings.create(
-            model=self.settings.openai_embedding_model,
+            model=self.env_settings.openai_embedding_model,
             input=text,
         )
         return response.data[0].embedding
@@ -157,7 +157,7 @@ class QdrantService:
             try:
                 # Batch embedding call
                 response = self.openai.embeddings.create(
-                    model=self.settings.openai_embedding_model,
+                    model=self.env_settings.openai_embedding_model,
                     input=texts,
                 )
 
@@ -203,16 +203,17 @@ class QdrantService:
         try:
             query_embedding = self._get_embedding(query)
 
-            results = self.client.search(
+            results = self.client.query_points(
                 collection_name=self.collection_name,
-                query_vector=query_embedding,
+                query=query_embedding,
                 limit=limit,
                 score_threshold=score_threshold,
+                with_payload=True,
             )
 
             return [
                 {**hit.payload, "similarity_score": hit.score}
-                for hit in results
+                for hit in results.points
             ]
 
         except Exception as e:
@@ -238,7 +239,6 @@ class QdrantService:
             info = self.client.get_collection(self.collection_name)
             return {
                 "name": self.collection_name,
-                "vectors_count": info.vectors_count,
                 "points_count": info.points_count,
                 "status": str(info.status),
             }
@@ -255,6 +255,10 @@ class QdrantService:
             logger.error(f"[QDRANT] Clear collection error: {e}")
             return False
 
+    def is_qdrant_configured(self) -> bool:
+        """Check if Qdrant connection is configured."""
+        return bool(self.qdrant_url)
+
     def is_configured(self) -> bool:
-        """Check if Qdrant and OpenAI are configured."""
+        """Check if Qdrant and OpenAI are configured (needed for embedding/search)."""
         return bool(self.qdrant_url and self.openai_api_key)

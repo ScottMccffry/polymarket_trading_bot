@@ -90,6 +90,13 @@ export default function Settings() {
   const [telegramPhone, setTelegramPhone] = useState("");
   const [telegramSaving, setTelegramSaving] = useState(false);
   const [telegramMessage, setTelegramMessage] = useState("");
+  // Telegram auth state
+  const [telegramStatus, setTelegramStatus] = useState<{ configured: boolean; authenticated: boolean } | null>(null);
+  const [telegramConnecting, setTelegramConnecting] = useState(false);
+  const [telegramVerifyCode, setTelegramVerifyCode] = useState("");
+  const [telegram2FAPassword, setTelegram2FAPassword] = useState("");
+  const [telegramNeeds2FA, setTelegramNeeds2FA] = useState(false);
+  const [telegramVerifying, setTelegramVerifying] = useState(false);
 
   // LLM state
   const [llmSettings, setLlmSettings] = useState<LLMSettings | null>(null);
@@ -119,6 +126,8 @@ export default function Settings() {
   // Load settings on mount
   useEffect(() => {
     loadAllSettings();
+    checkTelegramStatus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAllSettings = async () => {
@@ -175,6 +184,56 @@ export default function Settings() {
       setTelegramMessage(`Error: ${error}`);
     } finally {
       setTelegramSaving(false);
+    }
+  };
+
+  const checkTelegramStatus = async () => {
+    try {
+      const status = await api.getTelegramStatus();
+      setTelegramStatus(status);
+    } catch (error) {
+      setTelegramMessage(`Error checking status: ${error}`);
+    }
+  };
+
+  const connectTelegram = async () => {
+    setTelegramConnecting(true);
+    setTelegramMessage("");
+    try {
+      const result = await api.connectTelegram();
+      if (result.success) {
+        setTelegramMessage("Verification code sent to your phone");
+      } else {
+        setTelegramMessage(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      setTelegramMessage(`Error: ${error}`);
+    } finally {
+      setTelegramConnecting(false);
+    }
+  };
+
+  const verifyTelegram = async () => {
+    setTelegramVerifying(true);
+    setTelegramMessage("");
+    try {
+      const result = await api.verifyTelegram(telegramVerifyCode, telegram2FAPassword || undefined);
+      if (result.success) {
+        setTelegramMessage("Successfully authenticated!");
+        setTelegramVerifyCode("");
+        setTelegram2FAPassword("");
+        setTelegramNeeds2FA(false);
+        await checkTelegramStatus();
+      } else if (result.needs_2fa) {
+        setTelegramNeeds2FA(true);
+        setTelegramMessage("2FA password required");
+      } else {
+        setTelegramMessage(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      setTelegramMessage(`Error: ${error}`);
+    } finally {
+      setTelegramVerifying(false);
     }
   };
 
@@ -314,6 +373,55 @@ export default function Settings() {
                   >
                     {telegramMessage}
                   </span>
+                )}
+              </div>
+
+              {/* Telegram Authentication */}
+              <div className="mt-6 pt-6 border-t border-border">
+                <h4 className="font-medium mb-3">Authentication</h4>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-sm text-muted-foreground">Status:</span>
+                  {telegramStatus?.authenticated ? (
+                    <span className="text-sm text-green-500">Authenticated</span>
+                  ) : telegramStatus?.configured ? (
+                    <span className="text-sm text-yellow-500">Not authenticated</span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">Not configured</span>
+                  )}
+                  <Button variant="outline" size="sm" onClick={checkTelegramStatus}>
+                    Refresh
+                  </Button>
+                </div>
+
+                {!telegramStatus?.authenticated && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <Button onClick={connectTelegram} disabled={telegramConnecting}>
+                        {telegramConnecting ? "Connecting..." : "Send Verification Code"}
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <Input
+                        placeholder="Enter verification code"
+                        value={telegramVerifyCode}
+                        onChange={(e) => setTelegramVerifyCode(e.target.value)}
+                        className="w-48"
+                      />
+                      {telegramNeeds2FA && (
+                        <Input
+                          type="password"
+                          placeholder="2FA Password"
+                          value={telegram2FAPassword}
+                          onChange={(e) => setTelegram2FAPassword(e.target.value)}
+                          className="w-48"
+                        />
+                      )}
+                      <Button onClick={verifyTelegram} disabled={telegramVerifying || !telegramVerifyCode}>
+                        {telegramVerifying ? "Verifying..." : "Verify"}
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

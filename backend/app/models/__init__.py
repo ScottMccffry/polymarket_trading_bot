@@ -1,5 +1,6 @@
 from .user import User, UserResponse, Token, TokenData
 from .signal import Signal, SignalCreate, SignalResponse
+from .source import Source, SourceCreate, SourceUpdate, SourceResponse
 from .strategy import (
     CustomStrategy,
     CustomStrategyCreate,

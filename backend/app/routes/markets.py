@@ -190,7 +190,7 @@ async def semantic_search(
 async def qdrant_status():
     """Get Qdrant collection status."""
     qdrant = QdrantService()
-    if not qdrant.is_configured():
+    if not qdrant.is_qdrant_configured():
         return {"configured": False, "error": "Qdrant not configured"}
 
     info = qdrant.get_collection_info()

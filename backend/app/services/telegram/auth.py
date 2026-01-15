@@ -1,13 +1,41 @@
 """Telegram authentication service."""
+import json
 import logging
 from pathlib import Path
 
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
-from ...config import Settings, get_settings
+from ...config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Settings file path (same as in routes/settings.py)
+SETTINGS_FILE = Path("data/settings.json")
+
+
+def _load_saved_settings() -> dict:
+    """Load settings from JSON file."""
+    if SETTINGS_FILE.exists():
+        try:
+            with open(SETTINGS_FILE) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {}
+    return {}
+
+
+def _get_effective_telegram_settings() -> dict:
+    """Get effective Telegram settings, preferring saved over env."""
+    saved = _load_saved_settings()
+    env_settings = get_settings()
+
+    return {
+        "api_id": saved.get("telegram_api_id") or env_settings.telegram_api_id,
+        "api_hash": saved.get("telegram_api_hash") or env_settings.telegram_api_hash,
+        "phone": saved.get("telegram_phone") or env_settings.telegram_phone,
+        "session_path": env_settings.telegram_session_path,
+    }
 
 
 class TelegramAuth:
@@ -30,29 +58,29 @@ class TelegramAuth:
             cls._instance = cls()
         return cls._instance
 
-    def _get_session_path(self, settings: Settings) -> str:
+    def _get_session_path(self, session_path: str) -> str:
         """Get session file path."""
-        path = Path(settings.telegram_session_path)
+        path = Path(session_path)
         path.mkdir(parents=True, exist_ok=True)
         return str(path / "session")
 
     async def connect(self) -> dict:
         """Start authentication - sends verification code."""
-        settings = get_settings()
+        tg_settings = _get_effective_telegram_settings()
 
-        if not settings.telegram_api_id:
+        if not tg_settings["api_id"]:
             return {"success": False, "error": "API ID not configured"}
-        if not settings.telegram_api_hash:
+        if not tg_settings["api_hash"]:
             return {"success": False, "error": "API Hash not configured"}
-        if not settings.telegram_phone:
+        if not tg_settings["phone"]:
             return {"success": False, "error": "Phone number not configured"}
 
         try:
-            session_path = self._get_session_path(settings)
+            session_path = self._get_session_path(tg_settings["session_path"])
             self._client = TelegramClient(
                 session_path,
-                settings.telegram_api_id,
-                settings.telegram_api_hash,
+                tg_settings["api_id"],
+                tg_settings["api_hash"],
             )
 
             await self._client.connect()
@@ -63,7 +91,7 @@ class TelegramAuth:
                 return {"success": True, "authenticated": True}
 
             # Send verification code
-            await self._client.send_code_request(settings.telegram_phone)
+            await self._client.send_code_request(tg_settings["phone"])
             self._awaiting_code = True
             logger.info("[TELEGRAM] Verification code sent")
 
@@ -86,10 +114,10 @@ class TelegramAuth:
         if not self._awaiting_code:
             return {"success": False, "error": "Not awaiting code"}
 
-        settings = get_settings()
+        tg_settings = _get_effective_telegram_settings()
 
         try:
-            await self._client.sign_in(settings.telegram_phone, code)
+            await self._client.sign_in(tg_settings["phone"], code)
             self._authenticated = True
             self._awaiting_code = False
             logger.info("[TELEGRAM] Authenticated successfully")
@@ -112,8 +140,8 @@ class TelegramAuth:
 
     async def disconnect(self) -> dict:
         """Log out and delete session."""
-        settings = get_settings()
-        session_path = self._get_session_path(settings)
+        tg_settings = _get_effective_telegram_settings()
+        session_path = self._get_session_path(tg_settings["session_path"])
 
         if self._client:
             try:
@@ -142,8 +170,8 @@ class TelegramAuth:
 
     def status(self) -> dict:
         """Get current auth status."""
-        settings = get_settings()
-        session_path = self._get_session_path(settings)
+        tg_settings = _get_effective_telegram_settings()
+        session_path = self._get_session_path(tg_settings["session_path"])
         session_file = Path(session_path + ".session")
 
         return {
@@ -152,7 +180,7 @@ class TelegramAuth:
             "awaiting_code": self._awaiting_code,
             "connected": self._client is not None and self._client.is_connected(),
             "error": self._error,
-            "configured": bool(settings.telegram_api_id and settings.telegram_api_hash),
+            "configured": bool(tg_settings["api_id"] and tg_settings["api_hash"]),
         }
 
     def get_client(self) -> TelegramClient | None:

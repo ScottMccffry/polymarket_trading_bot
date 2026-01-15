@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus } from "lucide-react";
+import { api } from "@/lib/api";
 
 
 export default function Sources() {
@@ -21,28 +22,54 @@ export default function Sources() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<Source | null>(null);
   const [filter, setFilter] = useState<SourceType | "all">("all");
+  const [error, setError] = useState<string | null>(null);
+
+  const loadSources = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await api.getSources();
+      // Map API response to Source type
+      const mapped: Source[] = data.map((s) => ({
+        id: s.id,
+        name: s.name,
+        type: s.type as SourceType,
+        enabled: s.enabled,
+        config: s.config || {},
+        created_at: s.created_at,
+        updated_at: s.updated_at,
+        signals_count: 0, // TODO: Add signals count to API
+      }));
+      setSources(mapped);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load sources");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // TODO: Replace with actual API call when sources API is implemented
-    const loadSources = async () => {
-      setIsLoading(true);
-      // No mock data - start with empty sources
-      setSources([]);
-      setIsLoading(false);
-    };
     loadSources();
   }, []);
 
   const handleToggleSource = async (id: number, enabled: boolean) => {
-    // TODO: API call to toggle source
-    setSources((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, enabled } : s))
-    );
+    try {
+      await api.toggleSource(id);
+      setSources((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, enabled } : s))
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to toggle source");
+    }
   };
 
   const handleDeleteSource = async (id: number) => {
-    // TODO: API call to delete source
-    setSources((prev) => prev.filter((s) => s.id !== id));
+    try {
+      await api.deleteSource(id);
+      setSources((prev) => prev.filter((s) => s.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete source");
+    }
   };
 
   const handleEditSource = (source: Source) => {
@@ -51,27 +78,51 @@ export default function Sources() {
   };
 
   const handleSaveSource = async (data: SourceFormData) => {
-    if (editingSource) {
-      // TODO: API call to update source
-      setSources((prev) =>
-        prev.map((s) =>
-          s.id === editingSource.id
-            ? { ...s, ...data, updated_at: new Date().toISOString() }
-            : s
-        )
-      );
-    } else {
-      // TODO: API call to create source
-      const newSource: Source = {
-        id: Math.max(...sources.map((s) => s.id), 0) + 1,
-        ...data,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        signals_count: 0,
-      };
-      setSources((prev) => [...prev, newSource]);
+    try {
+      if (editingSource) {
+        const updated = await api.updateSource(editingSource.id, {
+          name: data.name,
+          type: data.type,
+          enabled: data.enabled,
+          config: data.config,
+        });
+        setSources((prev) =>
+          prev.map((s) =>
+            s.id === editingSource.id
+              ? {
+                  ...s,
+                  name: updated.name,
+                  type: updated.type as SourceType,
+                  enabled: updated.enabled,
+                  config: updated.config || {},
+                  updated_at: updated.updated_at,
+                }
+              : s
+          )
+        );
+      } else {
+        const created = await api.createSource({
+          name: data.name,
+          type: data.type,
+          enabled: data.enabled,
+          config: data.config,
+        });
+        const newSource: Source = {
+          id: created.id,
+          name: created.name,
+          type: created.type as SourceType,
+          enabled: created.enabled,
+          config: created.config || {},
+          created_at: created.created_at,
+          updated_at: created.updated_at,
+          signals_count: 0,
+        };
+        setSources((prev) => [newSource, ...prev]);
+      }
+      setEditingSource(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save source");
     }
-    setEditingSource(null);
   };
 
   const openAddModal = () => {
@@ -102,6 +153,15 @@ export default function Sources() {
           Add Source
         </Button>
       </div>
+
+      {error && (
+        <div className="bg-red-900/50 border border-red-500 text-red-300 px-4 py-2 rounded-lg mb-4">
+          {error}
+          <button onClick={() => setError(null)} className="ml-4 underline">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">

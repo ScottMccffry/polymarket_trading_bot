@@ -6,3 +6,4 @@ from .markets import router as markets_router
 from .telegram import router as telegram_router
 from .settings import router as settings_router
 from .bot import router as bot_router
+from .sources import router as sources_router
