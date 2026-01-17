@@ -207,7 +207,8 @@ class PositionManager:
                     strategy_name=strategy_name,
                     size=size_per_position,
                 )
-                positions.append(position)
+                if position is not None:
+                    positions.append(position)
             except Exception as e:
                 logger.error(f"[POSITION] Failed to open position for {signal.signal_id}: {e}")
 
