@@ -137,3 +137,67 @@ class TestBasicMetrics:
         # Unrealized percent: ($8 / $40) * 100 = 20%
         assert basic.total_unrealized_pnl == 8.0
         assert basic.total_unrealized_pnl_percent == 20.0
+
+
+class TestRiskMetrics:
+    """Test risk-adjusted metrics calculation."""
+
+    def test_empty_positions(self):
+        """Test with no positions."""
+        calc = AnalyticsCalculator([])
+        risk = calc.calculate_risk_metrics()
+
+        assert risk.sharpe_ratio is None
+        assert risk.max_drawdown == 0.0
+
+    def test_sharpe_ratio_calculation(self):
+        """Test Sharpe ratio with consistent returns."""
+        # Create positions with known daily returns - all identical so std_dev = 0
+        positions = [
+            Position(id=i, status="closed", realized_pnl=10.0, realized_pnl_percent=2.0,
+                     entry_price=0.5, size=100, opened_at=f"2025-01-{i+1:02d}T10:00:00Z",
+                     closed_at=f"2025-01-{i+1:02d}T12:00:00Z")
+            for i in range(10)
+        ]
+        calc = AnalyticsCalculator(positions)
+        risk = calc.calculate_risk_metrics()
+
+        # With constant returns (std_dev = 0), Sharpe is undefined (returns None)
+        assert risk.sharpe_ratio is None
+
+    def test_max_drawdown(self):
+        """Test max drawdown calculation."""
+        # Create sequence: +10, +10, -30, +5 (drawdown of 30 from peak of 20)
+        positions = [
+            Position(id=1, status="closed", realized_pnl=10.0, entry_price=0.5, size=100,
+                     closed_at="2025-01-01T12:00:00Z"),
+            Position(id=2, status="closed", realized_pnl=10.0, entry_price=0.5, size=100,
+                     closed_at="2025-01-02T12:00:00Z"),
+            Position(id=3, status="closed", realized_pnl=-30.0, entry_price=0.5, size=100,
+                     closed_at="2025-01-03T12:00:00Z"),
+            Position(id=4, status="closed", realized_pnl=5.0, entry_price=0.5, size=100,
+                     closed_at="2025-01-04T12:00:00Z"),
+        ]
+        calc = AnalyticsCalculator(positions)
+        risk = calc.calculate_risk_metrics()
+
+        # Peak was 20, dropped to -10, drawdown = 30
+        assert risk.max_drawdown == 30.0
+
+    def test_sortino_ratio(self):
+        """Test Sortino ratio only considers downside volatility."""
+        positions = [
+            Position(id=1, status="closed", realized_pnl=20.0, realized_pnl_percent=4.0,
+                     entry_price=0.5, size=100, closed_at="2025-01-01T12:00:00Z"),
+            Position(id=2, status="closed", realized_pnl=-5.0, realized_pnl_percent=-1.0,
+                     entry_price=0.5, size=100, closed_at="2025-01-02T12:00:00Z"),
+            Position(id=3, status="closed", realized_pnl=15.0, realized_pnl_percent=3.0,
+                     entry_price=0.5, size=100, closed_at="2025-01-03T12:00:00Z"),
+        ]
+        calc = AnalyticsCalculator(positions)
+        risk = calc.calculate_risk_metrics()
+
+        assert risk.sortino_ratio is not None
+        # Sortino should be higher than Sharpe when most returns are positive
+        if risk.sharpe_ratio:
+            assert risk.sortino_ratio >= risk.sharpe_ratio
