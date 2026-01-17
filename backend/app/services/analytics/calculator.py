@@ -1,4 +1,5 @@
 """Analytics calculator for computing trading metrics."""
+from datetime import datetime
 import math
 from typing import Sequence
 
@@ -176,3 +177,109 @@ class AnalyticsCalculator:
         curr_dd_pct = (current_drawdown / total_invested * 100) if total_invested > 0 else 0
 
         return max_drawdown, max_dd_pct, current_drawdown, curr_dd_pct
+
+    def calculate_efficiency_metrics(self) -> EfficiencyMetrics:
+        """Calculate trading efficiency metrics."""
+        if not self.closed:
+            return EfficiencyMetrics(
+                profit_factor=None,
+                expectancy=0.0,
+                avg_hold_time_hours=None,
+                trades_per_day=0.0,
+                longest_win_streak=0,
+                longest_loss_streak=0,
+                current_streak=0,
+                current_streak_type="none",
+            )
+
+        # Profit factor
+        gross_profit = sum(p.realized_pnl or 0 for p in self.wins)
+        gross_loss = abs(sum(p.realized_pnl or 0 for p in self.losses))
+        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else None
+
+        # Expectancy
+        basic = self.calculate_basic_metrics()
+        win_rate = basic.win_rate / 100
+        loss_rate = 1 - win_rate
+        expectancy = (win_rate * basic.avg_win) - (loss_rate * basic.avg_loss)
+
+        # Average hold time
+        hold_times = []
+        for p in self.closed:
+            if p.opened_at and p.closed_at:
+                try:
+                    opened = datetime.fromisoformat(p.opened_at.replace("Z", "+00:00"))
+                    closed = datetime.fromisoformat(p.closed_at.replace("Z", "+00:00"))
+                    hours = (closed - opened).total_seconds() / 3600
+                    hold_times.append(hours)
+                except (ValueError, TypeError):
+                    pass
+        avg_hold = (sum(hold_times) / len(hold_times)) if hold_times else None
+
+        # Trades per day
+        trades_per_day = self._calculate_trades_per_day()
+
+        # Streaks
+        win_streak, loss_streak, current, current_type = self._calculate_streaks()
+
+        return EfficiencyMetrics(
+            profit_factor=round(profit_factor, 2) if profit_factor else None,
+            expectancy=round(expectancy, 2),
+            avg_hold_time_hours=round(avg_hold, 2) if avg_hold else None,
+            trades_per_day=round(trades_per_day, 2),
+            longest_win_streak=win_streak,
+            longest_loss_streak=loss_streak,
+            current_streak=current,
+            current_streak_type=current_type,
+        )
+
+    def _calculate_trades_per_day(self) -> float:
+        """Calculate average trades per day."""
+        closed_with_date = [p for p in self.closed if p.closed_at]
+        if not closed_with_date:
+            return 0.0
+
+        dates = set()
+        for p in closed_with_date:
+            try:
+                date = datetime.fromisoformat(p.closed_at.replace("Z", "+00:00")).date()
+                dates.add(date)
+            except (ValueError, TypeError):
+                pass
+
+        if not dates:
+            return 0.0
+
+        return len(closed_with_date) / len(dates)
+
+    def _calculate_streaks(self) -> tuple[int, int, int, str]:
+        """Calculate win/loss streaks."""
+        sorted_closed = sorted(
+            [p for p in self.closed if p.closed_at],
+            key=lambda p: p.closed_at
+        )
+
+        if not sorted_closed:
+            return 0, 0, 0, "none"
+
+        longest_win = 0
+        longest_loss = 0
+        current_win = 0
+        current_loss = 0
+
+        for p in sorted_closed:
+            if (p.realized_pnl or 0) > 0:
+                current_win += 1
+                current_loss = 0
+                longest_win = max(longest_win, current_win)
+            else:
+                current_loss += 1
+                current_win = 0
+                longest_loss = max(longest_loss, current_loss)
+
+        # Current streak
+        if current_win > 0:
+            return longest_win, longest_loss, current_win, "win"
+        elif current_loss > 0:
+            return longest_win, longest_loss, current_loss, "loss"
+        return longest_win, longest_loss, 0, "none"

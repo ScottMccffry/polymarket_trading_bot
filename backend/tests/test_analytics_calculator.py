@@ -201,3 +201,62 @@ class TestRiskMetrics:
         # Sortino should be higher than Sharpe when most returns are positive
         if risk.sharpe_ratio:
             assert risk.sortino_ratio >= risk.sharpe_ratio
+
+
+class TestEfficiencyMetrics:
+    """Test trading efficiency metrics."""
+
+    def test_empty_positions(self):
+        """Test with no positions."""
+        calc = AnalyticsCalculator([])
+        eff = calc.calculate_efficiency_metrics()
+
+        assert eff.profit_factor is None
+        assert eff.expectancy == 0.0
+
+    def test_profit_factor(self):
+        """Test profit factor calculation."""
+        positions = [
+            Position(id=1, status="closed", realized_pnl=30.0, entry_price=0.5, size=100),
+            Position(id=2, status="closed", realized_pnl=-10.0, entry_price=0.5, size=100),
+            Position(id=3, status="closed", realized_pnl=20.0, entry_price=0.5, size=100),
+        ]
+        calc = AnalyticsCalculator(positions)
+        eff = calc.calculate_efficiency_metrics()
+
+        # Profit factor = gross profit / gross loss = 50 / 10 = 5.0
+        assert eff.profit_factor == 5.0
+        # Expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
+        # = (0.667 * 25) - (0.333 * 10) = 16.67 - 3.33 = 13.33
+        assert eff.expectancy == pytest.approx(13.33, rel=0.01)
+
+    def test_win_loss_streaks(self):
+        """Test streak calculation."""
+        positions = [
+            Position(id=1, status="closed", realized_pnl=10.0, closed_at="2025-01-01T12:00:00Z"),
+            Position(id=2, status="closed", realized_pnl=10.0, closed_at="2025-01-02T12:00:00Z"),
+            Position(id=3, status="closed", realized_pnl=10.0, closed_at="2025-01-03T12:00:00Z"),
+            Position(id=4, status="closed", realized_pnl=-5.0, closed_at="2025-01-04T12:00:00Z"),
+            Position(id=5, status="closed", realized_pnl=-5.0, closed_at="2025-01-05T12:00:00Z"),
+            Position(id=6, status="closed", realized_pnl=10.0, closed_at="2025-01-06T12:00:00Z"),
+        ]
+        calc = AnalyticsCalculator(positions)
+        eff = calc.calculate_efficiency_metrics()
+
+        assert eff.longest_win_streak == 3
+        assert eff.longest_loss_streak == 2
+        assert eff.current_streak == 1
+        assert eff.current_streak_type == "win"
+
+    def test_avg_hold_time(self):
+        """Test average hold time calculation."""
+        positions = [
+            Position(id=1, status="closed", realized_pnl=10.0,
+                     opened_at="2025-01-01T10:00:00Z", closed_at="2025-01-01T12:00:00Z"),  # 2 hours
+            Position(id=2, status="closed", realized_pnl=10.0,
+                     opened_at="2025-01-02T10:00:00Z", closed_at="2025-01-02T14:00:00Z"),  # 4 hours
+        ]
+        calc = AnalyticsCalculator(positions)
+        eff = calc.calculate_efficiency_metrics()
+
+        assert eff.avg_hold_time_hours == 3.0  # (2 + 4) / 2
