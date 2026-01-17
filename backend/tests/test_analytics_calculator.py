@@ -3,6 +3,7 @@ import pytest
 
 from app.models.position import Position
 from app.services.analytics.calculator import AnalyticsCalculator
+from app.services.analytics.filters import AnalyticsFilter
 
 
 class TestBasicMetrics:
@@ -322,3 +323,61 @@ class TestTimeseries:
         assert series[1].value == 30.0
         # Day 3: drawdown of 25 (from peak 20 to -5)
         assert series[2].value == 25.0
+
+
+class TestFiltering:
+    """Test position filtering."""
+
+    def test_filter_by_trading_mode(self):
+        """Test filtering by trading mode."""
+        positions = [
+            Position(id=1, trading_mode="live", status="closed", realized_pnl=10.0),
+            Position(id=2, trading_mode="paper", status="closed", realized_pnl=20.0),
+            Position(id=3, trading_mode="live", status="closed", realized_pnl=30.0),
+        ]
+
+        filtered = AnalyticsFilter.apply(positions, trading_mode="live")
+        assert len(filtered) == 2
+        assert all(p.trading_mode == "live" for p in filtered)
+
+    def test_filter_by_date_range(self):
+        """Test filtering by date range."""
+        positions = [
+            Position(id=1, status="closed", realized_pnl=10.0, closed_at="2025-01-01T12:00:00Z"),
+            Position(id=2, status="closed", realized_pnl=20.0, closed_at="2025-01-15T12:00:00Z"),
+            Position(id=3, status="closed", realized_pnl=30.0, closed_at="2025-01-30T12:00:00Z"),
+        ]
+
+        filtered = AnalyticsFilter.apply(
+            positions,
+            start_date="2025-01-10",
+            end_date="2025-01-20"
+        )
+        assert len(filtered) == 1
+        assert filtered[0].id == 2
+
+    def test_filter_by_strategy(self):
+        """Test filtering by strategy."""
+        positions = [
+            Position(id=1, strategy_name="Alpha", status="closed", realized_pnl=10.0),
+            Position(id=2, strategy_name="Beta", status="closed", realized_pnl=20.0),
+            Position(id=3, strategy_name="Alpha", status="closed", realized_pnl=30.0),
+        ]
+
+        filtered = AnalyticsFilter.apply(positions, strategy_name="Alpha")
+        assert len(filtered) == 2
+
+    def test_group_by_strategy(self):
+        """Test grouping by strategy."""
+        positions = [
+            Position(id=1, strategy_name="Alpha", status="closed", realized_pnl=10.0),
+            Position(id=2, strategy_name="Beta", status="closed", realized_pnl=20.0),
+            Position(id=3, strategy_name="Alpha", status="closed", realized_pnl=30.0),
+        ]
+
+        groups = AnalyticsFilter.group_by(positions, "strategy_name")
+        assert len(groups) == 2
+        assert "Alpha" in groups
+        assert "Beta" in groups
+        assert len(groups["Alpha"]) == 2
+        assert len(groups["Beta"]) == 1
