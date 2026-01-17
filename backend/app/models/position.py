@@ -29,6 +29,17 @@ class Position(Base):
     opened_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
     closed_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
+    # Order tracking fields (for real trading)
+    entry_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    entry_order_status: Mapped[str | None] = mapped_column(String(50), nullable=True)  # pending, filled, failed
+    exit_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    exit_order_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    shares_ordered: Mapped[float | None] = mapped_column(Float, nullable=True)
+    shares_filled: Mapped[float | None] = mapped_column(Float, nullable=True)
+    average_fill_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    trading_mode: Mapped[str | None] = mapped_column(String(50), default="paper")  # paper or live
+    last_order_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
 
 # Pydantic models
 class PositionCreate(BaseModel):
@@ -65,6 +76,16 @@ class PositionResponse(BaseModel):
     source: str | None
     opened_at: str | None
     closed_at: str | None
+    # Order tracking fields
+    entry_order_id: str | None = None
+    entry_order_status: str | None = None
+    exit_order_id: str | None = None
+    exit_order_status: str | None = None
+    shares_ordered: float | None = None
+    shares_filled: float | None = None
+    average_fill_price: float | None = None
+    trading_mode: str | None = "paper"
+    last_order_error: str | None = None
 
     class Config:
         from_attributes = True

@@ -1,4 +1,4 @@
-"""Strategy execution service."""
+"""Strategy execution service with real order execution support."""
 import logging
 from datetime import datetime, UTC
 from sqlalchemy import select
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...models.position import Position
 from ...models.strategy import CustomStrategy as CustomStrategyModel, AdvancedStrategy as AdvancedStrategyModel
 from ...services.polymarket import PolymarketClient
+from ...services.polymarket.trading_client import trading_client, OrderSide
 from .strategies import CustomStrategy, AdvancedStrategy, AdvancedStrategyConfig, SourceParams, PartialExitConfig
 from .simulation import SimulationEngine
 
@@ -219,12 +220,29 @@ class StrategyExecutor:
         reason: str,
         exit_percent: float,
     ) -> dict:
-        """Execute position exit."""
+        """Execute position exit with real order if live trading."""
         entry = position.entry_price or 0
         size = position.size or 0
 
+        # Check if this is a live position that needs real order
+        is_live = position.trading_mode == "live" and trading_client.is_live_enabled()
+
         if exit_percent >= 1.0:
             # Full exit
+            if is_live and position.token_id:
+                # Place real sell order
+                exit_result = await self._place_exit_order(
+                    db, position, exit_price, exit_percent
+                )
+                if not exit_result["success"]:
+                    # Order failed - don't close position
+                    return {
+                        "position_id": position.id,
+                        "action": "exit_failed",
+                        "reason": reason,
+                        "error": exit_result.get("error"),
+                    }
+
             pnl = (exit_price - entry) * (size / entry) if entry > 0 else 0
             pnl_pct = (pnl / size) * 100 if size > 0 else 0
 
@@ -251,11 +269,25 @@ class StrategyExecutor:
                 "exit_price": exit_price,
                 "pnl": pnl,
                 "pnl_percent": pnl_pct,
+                "trading_mode": position.trading_mode,
             }
         else:
             # Partial exit
             exit_size = size * exit_percent
             remaining_size = size - exit_size
+
+            if is_live and position.token_id:
+                # Place real partial sell order
+                exit_result = await self._place_exit_order(
+                    db, position, exit_price, exit_percent
+                )
+                if not exit_result["success"]:
+                    return {
+                        "position_id": position.id,
+                        "action": "partial_exit_failed",
+                        "reason": reason,
+                        "error": exit_result.get("error"),
+                    }
 
             pnl = (exit_price - entry) * (exit_size / entry) if entry > 0 else 0
 
@@ -277,7 +309,42 @@ class StrategyExecutor:
                 "exit_price": exit_price,
                 "pnl": pnl,
                 "remaining_size": remaining_size,
+                "trading_mode": position.trading_mode,
             }
+
+    async def _place_exit_order(
+        self,
+        db: AsyncSession,
+        position: Position,
+        exit_price: float,
+        exit_percent: float,
+    ) -> dict:
+        """Place exit order on Polymarket CLOB."""
+        # Calculate shares to sell
+        shares_to_sell = (position.shares_filled or 0) * exit_percent
+        if shares_to_sell <= 0:
+            return {"success": False, "error": "No shares to sell"}
+
+        # Exit side is opposite of entry side
+        exit_side = OrderSide.SELL if position.side == "BUY" else OrderSide.BUY
+        size_usd = shares_to_sell * exit_price
+
+        result = trading_client.place_market_order(
+            token_id=position.token_id,
+            side=exit_side,
+            size_usd=size_usd,
+            price=exit_price,
+        )
+
+        if result.success:
+            position.exit_order_id = result.order_id
+            position.exit_order_status = result.status or "pending"
+            logger.info(f"[EXECUTOR] Exit order placed: {result.order_id}")
+            return {"success": True, "order_id": result.order_id}
+        else:
+            position.last_order_error = result.error
+            logger.error(f"[EXECUTOR] Exit order failed: {result.error}")
+            return {"success": False, "error": result.error}
 
     def clear_cache(self):
         """Clear strategy cache."""

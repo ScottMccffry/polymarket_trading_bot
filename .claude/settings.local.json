@@ -36,11 +36,19 @@
       "Bash(railway status:*)",
       "Bash(python:*)",
       "Bash(railway up:*)",
-      "Bash(timeout 5 python:*)"
+      "Bash(timeout 5 python:*)",
+      "Bash(timeout 10 python:*)",
+      "Bash(git rev-parse:*)",
+      "Skill(superpowers:subagent-driven-development)",
+      "Bash(git -C /Users/armandfatalot/polymarket_trading_bot rev-parse HEAD)",
+      "Bash(git -C /Users/armandfatalot/polymarket_trading_bot log --oneline -2)"
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "shadcn"
-  ]
+  ],
+  "enabledPlugins": {
+    "superpowers@superpowers-marketplace": true
+  }
 }

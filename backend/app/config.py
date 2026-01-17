@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     polymarket_gamma_url: str = "https://gamma-api.polymarket.com"
     min_days_until_end: int = 7  # Minimum days before market ends
 
+    # Polymarket Trading (Real Orders)
+    polymarket_private_key: str = ""  # Wallet private key
+    polymarket_funder_address: str = ""  # Wallet address (0x...)
+    polymarket_chain_id: int = 137  # Polygon mainnet
+    polymarket_signature_type: int = 0  # 0 = EOA (anonymous), 1 = Magic wallet
+    live_trading_enabled: bool = False  # Safety: must explicitly enable
+    max_position_size: float = 100.0  # Max USD per position
+    max_open_positions: int = 10  # Max concurrent positions
+
     # Scheduler settings
     market_harvest_interval_hours: int = 12  # Harvest markets every N hours
     market_harvest_max_markets: int = 5000  # Max markets to fetch per harvest
