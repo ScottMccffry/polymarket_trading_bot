@@ -200,3 +200,17 @@ def test_risk_config_save_to_settings(tmp_path):
     saved = json.loads(settings_file.read_text())
     assert saved["risk_max_position_size"] == 80.0
     assert saved["risk_max_daily_loss"] == 300.0
+
+
+def test_risk_manager_singleton():
+    from app.services.trading.risk_manager import risk_manager
+
+    assert risk_manager is not None
+    assert isinstance(risk_manager, RiskManager)
+
+
+def test_risk_manager_reload_config():
+    from app.services.trading.risk_manager import risk_manager
+
+    # Should not raise
+    risk_manager.reload_config()

@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+SETTINGS_FILE = Path("data/settings.json")
+
 
 @dataclass
 class RiskConfig:
@@ -266,3 +268,11 @@ class RiskManager:
             can_trade=len(errors) == 0,
             errors=errors,
         )
+
+    def reload_config(self) -> None:
+        """Reload config from settings file."""
+        self.config = RiskConfig.from_settings_file(SETTINGS_FILE)
+
+
+# Singleton instance
+risk_manager = RiskManager(RiskConfig.from_settings_file(SETTINGS_FILE))
