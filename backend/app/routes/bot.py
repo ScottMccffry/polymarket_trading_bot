@@ -13,6 +13,7 @@ from ..auth.security import get_current_user
 from ..models.user import User
 from ..services.bot import bot_orchestrator, signal_trader
 from ..services.trading import signal_generator
+from ..services.trading.risk_manager import risk_manager, RiskConfig, SETTINGS_FILE
 from ..database import get_db_context
 
 router = APIRouter(
@@ -219,3 +220,254 @@ async def stop_signal_monitoring(
     _monitoring_task.cancel()
 
     return {"status": "stopped", "message": "Signal monitoring stopped"}
+
+
+# ============================================================================
+# Live Trading Control Endpoints
+# ============================================================================
+
+@router.get("/trading/status")
+async def get_trading_status(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Get live trading status and configuration.
+
+    Returns whether trading is configured and enabled,
+    plus current safety limits.
+    """
+    from ..services.polymarket.trading_client import trading_client
+
+    return {
+        "configured": trading_client.is_configured(),
+        "live_enabled": trading_client.is_live_enabled(),
+        "max_position_size": trading_client.max_position_size,
+        "max_open_positions": trading_client.max_open_positions,
+        "chain_id": trading_client.chain_id,
+        "signature_type": trading_client.signature_type,
+        "funder_address": trading_client.funder_address[:10] + "..." if trading_client.funder_address else None,
+    }
+
+
+class TradingToggleRequest(BaseModel):
+    enabled: bool
+
+
+@router.post("/trading/enable")
+async def enable_live_trading(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Enable live trading.
+
+    Requires trading to be configured (private key and funder address set).
+    """
+    from ..services.polymarket.trading_client import trading_client, _save_settings, _load_saved_settings
+
+    if not trading_client.is_configured():
+        raise HTTPException(
+            status_code=400,
+            detail="Trading not configured. Set private key and funder address in settings first."
+        )
+
+    # Update settings
+    saved = _load_saved_settings()
+    saved["live_trading_enabled"] = True
+    _save_settings(saved)
+
+    # Reload settings in client
+    trading_client.reload_settings()
+
+    return {
+        "status": "enabled",
+        "message": "Live trading enabled. Real orders will now be placed.",
+    }
+
+
+@router.post("/trading/disable")
+async def disable_live_trading(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Disable live trading.
+
+    Switches back to paper trading mode.
+    """
+    from ..services.polymarket.trading_client import trading_client, _save_settings, _load_saved_settings
+
+    saved = _load_saved_settings()
+    saved["live_trading_enabled"] = False
+    _save_settings(saved)
+
+    trading_client.reload_settings()
+
+    return {
+        "status": "disabled",
+        "message": "Live trading disabled. Positions will be paper traded.",
+    }
+
+
+@router.get("/trading/open-orders")
+async def get_open_orders(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Get all open orders on Polymarket CLOB."""
+    from ..services.polymarket.trading_client import trading_client
+
+    if not trading_client.is_configured():
+        raise HTTPException(status_code=400, detail="Trading not configured")
+
+    orders = trading_client.get_open_orders()
+    return {"orders": orders, "count": len(orders)}
+
+
+@router.post("/trading/cancel-order/{order_id}")
+async def cancel_order(
+    order_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Cancel an open order by ID."""
+    from ..services.polymarket.trading_client import trading_client
+
+    if not trading_client.is_configured():
+        raise HTTPException(status_code=400, detail="Trading not configured")
+
+    result = trading_client.cancel_order(order_id)
+
+    if result.success:
+        return {"status": "cancelled", "order_id": order_id}
+    else:
+        raise HTTPException(status_code=400, detail=result.error)
+
+
+@router.post("/trading/cancel-all-orders")
+async def cancel_all_orders(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Cancel all open orders."""
+    from ..services.polymarket.trading_client import trading_client
+
+    if not trading_client.is_configured():
+        raise HTTPException(status_code=400, detail="Trading not configured")
+
+    result = trading_client.cancel_all_orders()
+
+    if result.success:
+        return {"status": "all_cancelled", "message": "All orders cancelled"}
+    else:
+        raise HTTPException(status_code=400, detail=result.error)
+
+
+@router.get("/trading/balances")
+async def get_trading_balances(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Get wallet balances (USDC, collateral)."""
+    from ..services.polymarket.trading_client import trading_client
+
+    if not trading_client.is_configured():
+        raise HTTPException(status_code=400, detail="Trading not configured")
+
+    return trading_client.get_balances()
+
+
+class TradingSettingsUpdate(BaseModel):
+    private_key: str | None = None
+    funder_address: str | None = None
+    max_position_size: float | None = None
+    max_open_positions: int | None = None
+
+
+@router.put("/trading/settings")
+async def update_trading_settings(
+    request: TradingSettingsUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Update trading settings.
+
+    Private key is stored securely and never returned in API responses.
+    """
+    from ..services.polymarket.trading_client import trading_client, _save_settings, _load_saved_settings
+
+    saved = _load_saved_settings()
+
+    if request.private_key:
+        saved["polymarket_private_key"] = request.private_key
+    if request.funder_address:
+        saved["polymarket_funder_address"] = request.funder_address
+    if request.max_position_size is not None:
+        saved["max_position_size"] = request.max_position_size
+    if request.max_open_positions is not None:
+        saved["max_open_positions"] = request.max_open_positions
+
+    _save_settings(saved)
+    trading_client.reload_settings()
+
+    return {
+        "status": "updated",
+        "configured": trading_client.is_configured(),
+        "message": "Trading settings updated",
+    }
+
+
+# ============================================================================
+# Risk Management Endpoints
+# ============================================================================
+
+class RiskSettingsResponse(BaseModel):
+    max_position_size: float
+    max_portfolio_risk_percent: float
+    max_daily_loss: float
+    max_drawdown_percent: float
+    max_open_positions: int
+    enabled: bool
+    daily_pnl: float
+
+
+class RiskSettingsUpdate(BaseModel):
+    max_position_size: float | None = None
+    max_portfolio_risk_percent: float | None = None
+    max_daily_loss: float | None = None
+    max_drawdown_percent: float | None = None
+    max_open_positions: int | None = None
+    enabled: bool | None = None
+
+
+@router.get("/risk", response_model=RiskSettingsResponse)
+async def get_risk_settings():
+    """Get current risk management settings."""
+    config = risk_manager.config
+    return RiskSettingsResponse(
+        max_position_size=config.max_position_size,
+        max_portfolio_risk_percent=config.max_portfolio_risk_percent,
+        max_daily_loss=config.max_daily_loss,
+        max_drawdown_percent=config.max_drawdown_percent,
+        max_open_positions=config.max_open_positions,
+        enabled=config.enabled,
+        daily_pnl=risk_manager.get_daily_pnl(),
+    )
+
+
+@router.put("/risk", response_model=RiskSettingsResponse)
+async def update_risk_settings(update: RiskSettingsUpdate):
+    """Update risk management settings."""
+    config = risk_manager.config
+
+    if update.max_position_size is not None:
+        config.max_position_size = update.max_position_size
+    if update.max_portfolio_risk_percent is not None:
+        config.max_portfolio_risk_percent = update.max_portfolio_risk_percent
+    if update.max_daily_loss is not None:
+        config.max_daily_loss = update.max_daily_loss
+    if update.max_drawdown_percent is not None:
+        config.max_drawdown_percent = update.max_drawdown_percent
+    if update.max_open_positions is not None:
+        config.max_open_positions = update.max_open_positions
+    if update.enabled is not None:
+        config.enabled = update.enabled
+
+    # Save to file
+    config.save_to_settings_file(SETTINGS_FILE)
+
+    return await get_risk_settings()
