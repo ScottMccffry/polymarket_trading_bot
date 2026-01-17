@@ -26,6 +26,14 @@ class RiskConfig:
     enabled: bool = True
 
 
+@dataclass
+class TradeValidationResult:
+    """Result of pre-trade validation."""
+    can_trade: bool
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
 class RiskManager:
     """
     Pre-trade risk validation.
@@ -163,3 +171,51 @@ class RiskManager:
             )
 
         return True, ""
+
+    def validate_trade(
+        self,
+        size_usd: float,
+        capital: float,
+        current_equity: float,
+        peak_equity: float,
+        open_position_count: int,
+    ) -> TradeValidationResult:
+        """
+        Run all pre-trade validations.
+
+        Args:
+            size_usd: Proposed position size
+            capital: Available trading capital
+            current_equity: Current portfolio value
+            peak_equity: Peak portfolio value
+            open_position_count: Current open position count
+
+        Returns:
+            TradeValidationResult with can_trade flag and any errors
+        """
+        errors = []
+
+        # Position size check
+        valid, error = self.validate_position_size(size_usd, capital)
+        if not valid:
+            errors.append(error)
+
+        # Daily loss check
+        valid, error = self.validate_daily_loss()
+        if not valid:
+            errors.append(error)
+
+        # Drawdown check
+        valid, error = self.validate_drawdown(current_equity, peak_equity)
+        if not valid:
+            errors.append(error)
+
+        # Open positions check
+        valid, error = self.validate_open_positions(open_position_count)
+        if not valid:
+            errors.append(error)
+
+        return TradeValidationResult(
+            can_trade=len(errors) == 0,
+            errors=errors,
+        )

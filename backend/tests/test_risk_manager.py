@@ -124,3 +124,46 @@ def test_validate_open_positions_at_limit():
     is_valid, error = manager.validate_open_positions(current_count=10)
     assert is_valid is False
     assert "max open positions" in error.lower()
+
+
+def test_validate_trade_all_checks_pass():
+    config = RiskConfig(
+        max_position_size=100.0,
+        max_portfolio_risk_percent=5.0,
+        max_daily_loss=200.0,
+        max_drawdown_percent=10.0,
+        max_open_positions=10,
+    )
+    manager = RiskManager(config)
+
+    result = manager.validate_trade(
+        size_usd=50.0,
+        capital=1000.0,
+        current_equity=950.0,
+        peak_equity=1000.0,
+        open_position_count=3,
+    )
+
+    assert result.can_trade is True
+    assert result.errors == []
+
+
+def test_validate_trade_multiple_failures():
+    config = RiskConfig(
+        max_position_size=50.0,
+        max_daily_loss=100.0,
+        max_open_positions=5,
+    )
+    manager = RiskManager(config)
+    manager.record_daily_pnl(-150.0)  # Exceed daily loss
+
+    result = manager.validate_trade(
+        size_usd=75.0,  # Exceeds max position
+        capital=1000.0,
+        current_equity=1000.0,
+        peak_equity=1000.0,
+        open_position_count=5,  # At limit
+    )
+
+    assert result.can_trade is False
+    assert len(result.errors) == 3  # position size, daily loss, open positions
