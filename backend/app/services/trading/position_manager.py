@@ -1,5 +1,7 @@
 """
 Position Manager - Open and manage trading positions.
+
+Supports both paper trading and real order execution via Polymarket CLOB.
 """
 
 import logging
@@ -11,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.position import Position
 from app.models.signal import Signal
+from app.services.polymarket.trading_client import trading_client, OrderSide
+from app.services.trading.risk_manager import risk_manager
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +36,13 @@ class PositionManager:
         strategy_id: Optional[int] = None,
         strategy_name: str = "signal_trader",
         size: Optional[float] = None,
-    ) -> Position:
+        execute_order: bool = True,
+    ) -> Optional[Position]:
         """
         Open a new position based on a signal.
+
+        If live trading is enabled and execute_order=True,
+        will place a real order on Polymarket.
 
         Args:
             db: Database session
@@ -42,11 +50,29 @@ class PositionManager:
             strategy_id: Optional strategy ID
             strategy_name: Name of the strategy
             size: Position size in USD (default: 50)
+            execute_order: Whether to execute real order if live trading enabled
 
         Returns:
-            The created Position object
+            The created Position object, or None if risk check fails
         """
         size = size or self.DEFAULT_POSITION_SIZE
+
+        # Run risk validation
+        open_positions = await self.get_open_positions(db)
+        risk_result = risk_manager.validate_trade(
+            size_usd=size,
+            capital=10000.0,  # TODO: Get from portfolio tracker
+            current_equity=10000.0,  # TODO: Get from portfolio tracker
+            peak_equity=10000.0,  # TODO: Get from portfolio tracker
+            open_position_count=len(open_positions),
+        )
+
+        if not risk_result.can_trade:
+            logger.warning(
+                f"[POSITION] Risk check failed for signal {signal.signal_id}: "
+                f"{', '.join(risk_result.errors)}"
+            )
+            return None
 
         # Check for existing open position on same market
         existing = await self._get_existing_position(
@@ -59,6 +85,15 @@ class PositionManager:
             )
             return existing
 
+        # Determine trading mode
+        is_live = trading_client.is_live_enabled() and execute_order and signal.token_id
+        trading_mode = "live" if is_live else "paper"
+
+        # Calculate entry price and shares
+        entry_price = signal.price_at_signal or 0.5
+        shares = size / entry_price if entry_price > 0 else 0
+
+        # Create position record
         position = Position(
             signal_id=signal.signal_id,
             strategy_id=strategy_id,
@@ -67,10 +102,13 @@ class PositionManager:
             token_id=signal.token_id,
             market_question=signal.market_question,
             side=signal.side,
-            entry_price=signal.price_at_signal or 0.5,  # Default to 0.5 if unknown
-            current_price=signal.price_at_signal or 0.5,
+            entry_price=entry_price,
+            current_price=entry_price,
             size=size,
-            status="open",
+            status="pending" if is_live else "open",
+            trading_mode=trading_mode,
+            shares_ordered=shares,
+            shares_filled=shares if not is_live else 0,  # Paper trades fill instantly
             unrealized_pnl=0.0,
             unrealized_pnl_percent=0.0,
             source=signal.source,
@@ -81,13 +119,62 @@ class PositionManager:
         await db.commit()
         await db.refresh(position)
 
+        # Place real order if live trading
+        if is_live:
+            await self._execute_entry_order(db, position, entry_price, size)
+
         logger.info(
-            f"[POSITION] Opened {position.side} position on "
+            f"[POSITION] Opened {position.side} {trading_mode} position on "
             f"'{position.market_question[:50] if position.market_question else 'Unknown'}...' "
             f"(size=${size}, entry={position.entry_price:.2f})"
         )
 
         return position
+
+    async def _execute_entry_order(
+        self,
+        db: AsyncSession,
+        position: Position,
+        price: float,
+        size_usd: float,
+    ) -> None:
+        """Execute entry order on Polymarket CLOB."""
+        # Validate order against limits
+        open_positions = await self.get_open_positions(db)
+        is_valid, error = trading_client.validate_order(size_usd, len(open_positions))
+
+        if not is_valid:
+            position.status = "failed"
+            position.last_order_error = error
+            position.entry_order_status = "failed"
+            await db.commit()
+            logger.error(f"[POSITION] Order validation failed: {error}")
+            return
+
+        # Place the order
+        side = OrderSide.BUY if position.side == "BUY" else OrderSide.SELL
+        result = trading_client.place_market_order(
+            token_id=position.token_id,
+            side=side,
+            size_usd=size_usd,
+            price=price,
+        )
+
+        if result.success:
+            position.entry_order_id = result.order_id
+            position.entry_order_status = result.status or "pending"
+            # For FOK orders, if successful they're filled immediately
+            if result.status == "filled" or result.status == "MATCHED":
+                position.status = "open"
+                position.shares_filled = position.shares_ordered
+            logger.info(f"[POSITION] Entry order placed: {result.order_id}")
+        else:
+            position.status = "failed"
+            position.entry_order_status = "failed"
+            position.last_order_error = result.error
+            logger.error(f"[POSITION] Entry order failed: {result.error}")
+
+        await db.commit()
 
     async def open_positions_from_signals(
         self,
