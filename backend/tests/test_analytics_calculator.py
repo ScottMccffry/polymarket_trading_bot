@@ -381,3 +381,43 @@ class TestFiltering:
         assert "Beta" in groups
         assert len(groups["Alpha"]) == 2
         assert len(groups["Beta"]) == 1
+
+    def test_filter_with_invalid_date_format(self):
+        """Test that invalid date formats don't crash and include positions.
+
+        When a date filter is invalid, it should be ignored (return all positions).
+        When a position has an invalid date, it should still be included.
+        """
+        positions = [
+            Position(id=1, status="closed", realized_pnl=10.0, closed_at="2025-01-15T12:00:00Z"),
+            Position(id=2, status="closed", realized_pnl=20.0, closed_at="invalid-date"),
+            Position(id=3, status="closed", realized_pnl=30.0, closed_at=None),
+        ]
+
+        # Invalid start_date should be ignored (returns all positions)
+        filtered = AnalyticsFilter.apply(positions, start_date="not-a-date")
+        assert len(filtered) == 3
+
+        # Valid date filter with invalid position date - position included
+        filtered = AnalyticsFilter.apply(
+            positions,
+            start_date="2025-01-10",
+            end_date="2025-01-20"
+        )
+        # Position 1 matches, positions 2 and 3 have no valid date so included
+        assert len(filtered) == 3
+
+    def test_filter_positions_without_dates(self):
+        """Test that positions without dates are included when filtering by date."""
+        positions = [
+            Position(id=1, status="closed", realized_pnl=10.0, closed_at="2025-01-15T12:00:00Z"),
+            Position(id=2, status="open", unrealized_pnl=20.0),  # No dates at all
+        ]
+
+        filtered = AnalyticsFilter.apply(
+            positions,
+            start_date="2025-01-10",
+            end_date="2025-01-20"
+        )
+        # Both should be included (position 2 has no date to filter on)
+        assert len(filtered) == 2

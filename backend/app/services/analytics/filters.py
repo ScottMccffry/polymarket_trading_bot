@@ -1,5 +1,5 @@
 """Filtering and grouping utilities for analytics."""
-from datetime import datetime
+from datetime import datetime, date
 from typing import Sequence
 from collections import defaultdict
 
@@ -8,6 +8,42 @@ from ...models.position import Position
 
 class AnalyticsFilter:
     """Filter and group positions for analytics."""
+
+    @staticmethod
+    def _parse_date(date_str: str | None) -> date | None:
+        """Parse date string to date object, handling various formats."""
+        if not date_str:
+            return None
+        try:
+            # Handle ISO format with timezone (Z suffix)
+            normalized = date_str.replace("Z", "+00:00")
+            return datetime.fromisoformat(normalized).date()
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _position_matches_date_range(
+        position: Position,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> bool:
+        """Check if position falls within date range."""
+        # Get position date (prefer closed_at, fall back to opened_at)
+        pos_date = None
+        if position.closed_at:
+            pos_date = AnalyticsFilter._parse_date(position.closed_at)
+        elif position.opened_at:
+            pos_date = AnalyticsFilter._parse_date(position.opened_at)
+
+        if pos_date is None:
+            # No valid date - include by default to avoid data loss
+            return True
+
+        if start_date and pos_date < start_date:
+            return False
+        if end_date and pos_date > end_date:
+            return False
+        return True
 
     @staticmethod
     def apply(
@@ -42,20 +78,14 @@ class AnalyticsFilter:
         if side:
             result = [p for p in result if p.side == side]
 
-        if start_date:
-            start_dt = datetime.fromisoformat(start_date)
-            result = [
-                p for p in result
-                if (p.closed_at and datetime.fromisoformat(p.closed_at.replace("Z", "+00:00")).date() >= start_dt.date())
-                or (p.opened_at and datetime.fromisoformat(p.opened_at.replace("Z", "+00:00")).date() >= start_dt.date())
-            ]
+        # Parse date filters once
+        start_dt = AnalyticsFilter._parse_date(start_date)
+        end_dt = AnalyticsFilter._parse_date(end_date)
 
-        if end_date:
-            end_dt = datetime.fromisoformat(end_date)
+        if start_dt or end_dt:
             result = [
                 p for p in result
-                if (p.closed_at and datetime.fromisoformat(p.closed_at.replace("Z", "+00:00")).date() <= end_dt.date())
-                or (p.opened_at and datetime.fromisoformat(p.opened_at.replace("Z", "+00:00")).date() <= end_dt.date())
+                if AnalyticsFilter._position_matches_date_range(p, start_dt, end_dt)
             ]
 
         return result
