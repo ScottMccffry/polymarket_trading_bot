@@ -167,3 +167,36 @@ def test_validate_trade_multiple_failures():
 
     assert result.can_trade is False
     assert len(result.errors) == 3  # position size, daily loss, open positions
+
+
+# Tests for settings file persistence
+import json
+from pathlib import Path
+
+
+def test_risk_config_load_from_settings(tmp_path):
+    # Create temp settings file
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(json.dumps({
+        "risk_max_position_size": 75.0,
+        "risk_max_daily_loss": 150.0,
+        "risk_enabled": True,
+    }))
+
+    config = RiskConfig.from_settings_file(settings_file)
+
+    assert config.max_position_size == 75.0
+    assert config.max_daily_loss == 150.0
+    assert config.enabled is True
+
+
+def test_risk_config_save_to_settings(tmp_path):
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text("{}")
+
+    config = RiskConfig(max_position_size=80.0, max_daily_loss=300.0)
+    config.save_to_settings_file(settings_file)
+
+    saved = json.loads(settings_file.read_text())
+    assert saved["risk_max_position_size"] == 80.0
+    assert saved["risk_max_daily_loss"] == 300.0

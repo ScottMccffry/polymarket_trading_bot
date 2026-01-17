@@ -4,8 +4,10 @@ Risk Manager - Pre-trade risk validation.
 Enforces position sizing, daily loss limits, and drawdown protection.
 """
 
+import json
 from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 
 
 @dataclass
@@ -24,6 +26,51 @@ class RiskConfig:
 
     # Master switch
     enabled: bool = True
+
+    @classmethod
+    def from_settings_file(cls, path: Path) -> "RiskConfig":
+        """Load risk config from settings file."""
+        if not path.exists():
+            return cls()
+
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return cls()
+
+        return cls(
+            max_position_size=data.get("risk_max_position_size", 100.0),
+            max_portfolio_risk_percent=data.get("risk_max_portfolio_risk_percent", 2.0),
+            max_daily_loss=data.get("risk_max_daily_loss", 200.0),
+            max_drawdown_percent=data.get("risk_max_drawdown_percent", 10.0),
+            max_open_positions=data.get("risk_max_open_positions", 10),
+            enabled=data.get("risk_enabled", True),
+        )
+
+    def save_to_settings_file(self, path: Path) -> None:
+        """Save risk config to settings file."""
+        # Load existing settings
+        data = {}
+        if path.exists():
+            try:
+                with open(path) as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, IOError):
+                data = {}
+
+        # Update risk settings
+        data["risk_max_position_size"] = self.max_position_size
+        data["risk_max_portfolio_risk_percent"] = self.max_portfolio_risk_percent
+        data["risk_max_daily_loss"] = self.max_daily_loss
+        data["risk_max_drawdown_percent"] = self.max_drawdown_percent
+        data["risk_max_open_positions"] = self.max_open_positions
+        data["risk_enabled"] = self.enabled
+
+        # Write back
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
 
 
 @dataclass
