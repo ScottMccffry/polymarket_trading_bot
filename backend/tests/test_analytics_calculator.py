@@ -260,3 +260,65 @@ class TestEfficiencyMetrics:
         eff = calc.calculate_efficiency_metrics()
 
         assert eff.avg_hold_time_hours == 3.0  # (2 + 4) / 2
+
+
+class TestFullSummary:
+    """Test full analytics summary."""
+
+    def test_calculate_summary(self):
+        """Test complete summary calculation."""
+        positions = [
+            Position(id=1, status="closed", realized_pnl=30.0, entry_price=0.5, size=100,
+                     opened_at="2025-01-01T10:00:00Z", closed_at="2025-01-01T12:00:00Z"),
+            Position(id=2, status="open", unrealized_pnl=5.0, entry_price=0.5, size=100),
+        ]
+        calc = AnalyticsCalculator(positions)
+        summary = calc.calculate_summary()
+
+        assert summary.basic.total_trades == 1
+        assert summary.basic.total_realized_pnl == 30.0
+        assert summary.total_invested > 0
+
+
+class TestTimeseries:
+    """Test timeseries generation."""
+
+    def test_equity_curve_daily(self):
+        """Test daily equity curve generation."""
+        positions = [
+            Position(id=1, status="closed", realized_pnl=10.0,
+                     closed_at="2025-01-01T12:00:00Z"),
+            Position(id=2, status="closed", realized_pnl=20.0,
+                     closed_at="2025-01-01T14:00:00Z"),
+            Position(id=3, status="closed", realized_pnl=-5.0,
+                     closed_at="2025-01-02T12:00:00Z"),
+        ]
+        calc = AnalyticsCalculator(positions)
+        series = calc.calculate_equity_timeseries(granularity="daily")
+
+        assert len(series) == 2
+        # Day 1: cumulative 30
+        assert series[0].value == 30.0
+        # Day 2: cumulative 25
+        assert series[1].value == 25.0
+
+    def test_drawdown_series(self):
+        """Test drawdown timeseries."""
+        positions = [
+            Position(id=1, status="closed", realized_pnl=20.0,
+                     closed_at="2025-01-01T12:00:00Z"),
+            Position(id=2, status="closed", realized_pnl=-30.0,
+                     closed_at="2025-01-02T12:00:00Z"),
+            Position(id=3, status="closed", realized_pnl=5.0,
+                     closed_at="2025-01-03T12:00:00Z"),
+        ]
+        calc = AnalyticsCalculator(positions)
+        series = calc.calculate_drawdown_timeseries(granularity="daily")
+
+        assert len(series) == 3
+        # Day 1: no drawdown (at peak)
+        assert series[0].value == 0.0
+        # Day 2: drawdown of 30 (from peak 20 to -10)
+        assert series[1].value == 30.0
+        # Day 3: drawdown of 25 (from peak 20 to -5)
+        assert series[2].value == 25.0

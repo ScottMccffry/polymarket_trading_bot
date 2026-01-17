@@ -1,4 +1,5 @@
 """Analytics calculator for computing trading metrics."""
+from collections import OrderedDict
 from datetime import datetime
 import math
 from typing import Sequence
@@ -9,6 +10,7 @@ from ...models.analytics import (
     RiskMetrics,
     EfficiencyMetrics,
     AnalyticsSummary,
+    TimeseriesPoint,
 )
 
 
@@ -283,3 +285,115 @@ class AnalyticsCalculator:
         elif current_loss > 0:
             return longest_win, longest_loss, current_loss, "loss"
         return longest_win, longest_loss, 0, "none"
+
+    def calculate_summary(self, filters_applied: dict | None = None) -> AnalyticsSummary:
+        """Calculate complete analytics summary."""
+        basic = self.calculate_basic_metrics()
+        risk = self.calculate_risk_metrics()
+        efficiency = self.calculate_efficiency_metrics()
+
+        total_invested = sum((p.entry_price or 0) * (p.size or 0) for p in self.positions)
+
+        return AnalyticsSummary(
+            basic=basic,
+            risk=risk,
+            efficiency=efficiency,
+            total_invested=round(total_invested, 2),
+            filters_applied=filters_applied or {},
+        )
+
+    def calculate_equity_timeseries(
+        self,
+        granularity: str = "daily",
+        group_by: str | None = None
+    ) -> list[TimeseriesPoint]:
+        """Calculate cumulative equity timeseries."""
+        if not self.closed:
+            return []
+
+        sorted_closed = sorted(
+            [p for p in self.closed if p.closed_at],
+            key=lambda p: p.closed_at
+        )
+
+        # Bucket by granularity
+        buckets = self._bucket_by_time(sorted_closed, granularity)
+
+        # Calculate cumulative
+        cumulative = 0.0
+        points = []
+        for timestamp, positions in buckets.items():
+            daily_pnl = sum(p.realized_pnl or 0 for p in positions)
+            cumulative += daily_pnl
+            points.append(TimeseriesPoint(
+                timestamp=timestamp,
+                value=round(cumulative, 2),
+                group=None,
+            ))
+
+        return points
+
+    def calculate_drawdown_timeseries(
+        self,
+        granularity: str = "daily"
+    ) -> list[TimeseriesPoint]:
+        """Calculate drawdown timeseries."""
+        if not self.closed:
+            return []
+
+        sorted_closed = sorted(
+            [p for p in self.closed if p.closed_at],
+            key=lambda p: p.closed_at
+        )
+        buckets = self._bucket_by_time(sorted_closed, granularity)
+
+        cumulative = 0.0
+        peak = 0.0
+        points = []
+
+        for timestamp, positions in buckets.items():
+            daily_pnl = sum(p.realized_pnl or 0 for p in positions)
+            cumulative += daily_pnl
+            if cumulative > peak:
+                peak = cumulative
+            drawdown = peak - cumulative
+            points.append(TimeseriesPoint(
+                timestamp=timestamp,
+                value=round(drawdown, 2),
+                group=None,
+            ))
+
+        return points
+
+    def _bucket_by_time(
+        self,
+        positions: list,
+        granularity: str
+    ) -> dict[str, list]:
+        """Bucket positions by time granularity."""
+        buckets: dict[str, list] = OrderedDict()
+
+        for p in positions:
+            if not p.closed_at:
+                continue
+
+            try:
+                dt = datetime.fromisoformat(p.closed_at.replace("Z", "+00:00"))
+
+                if granularity == "daily":
+                    key = dt.strftime("%Y-%m-%d")
+                elif granularity == "weekly":
+                    # ISO week
+                    key = dt.strftime("%Y-W%W")
+                elif granularity == "monthly":
+                    key = dt.strftime("%Y-%m")
+                else:
+                    key = dt.strftime("%Y-%m-%d")
+
+                if key not in buckets:
+                    buckets[key] = []
+                buckets[key].append(p)
+            except (ValueError, TypeError):
+                pass
+
+        return buckets
