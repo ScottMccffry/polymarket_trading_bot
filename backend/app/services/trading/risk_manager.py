@@ -142,3 +142,24 @@ class RiskManager:
             )
 
         return True, ""
+
+    def validate_open_positions(self, current_count: int) -> tuple[bool, str]:
+        """
+        Check if we can open another position.
+
+        Args:
+            current_count: Number of currently open positions
+
+        Returns:
+            (is_valid, error_message)
+        """
+        if not self.config.enabled:
+            return True, ""
+
+        if current_count >= self.config.max_open_positions:
+            return False, (
+                f"Max open positions reached: {current_count} "
+                f"(max: {self.config.max_open_positions})"
+            )
+
+        return True, ""

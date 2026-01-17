@@ -107,3 +107,20 @@ def test_validate_drawdown_exceeded():
     )
     assert is_valid is False
     assert "drawdown" in error.lower()
+
+
+def test_validate_open_positions_within_limit():
+    config = RiskConfig(max_open_positions=10)
+    manager = RiskManager(config)
+
+    is_valid, error = manager.validate_open_positions(current_count=5)
+    assert is_valid is True
+
+
+def test_validate_open_positions_at_limit():
+    config = RiskConfig(max_open_positions=10)
+    manager = RiskManager(config)
+
+    is_valid, error = manager.validate_open_positions(current_count=10)
+    assert is_valid is False
+    assert "max open positions" in error.lower()
