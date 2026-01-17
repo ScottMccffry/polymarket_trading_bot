@@ -1,4 +1,6 @@
 # backend/tests/test_risk_manager.py
+from datetime import date
+
 import pytest
 from app.services.trading.risk_manager import RiskConfig, RiskManager
 
@@ -41,3 +43,42 @@ def test_validate_position_size_exceeds_portfolio_risk():
     is_valid, error = manager.validate_position_size(50.0, capital=1000.0)
     assert is_valid is False
     assert "portfolio risk" in error.lower()
+
+
+def test_validate_daily_loss_within_limit():
+    config = RiskConfig(max_daily_loss=200.0)
+    manager = RiskManager(config)
+
+    # Record some losses
+    manager.record_daily_pnl(-50.0)
+    manager.record_daily_pnl(-30.0)  # Total: -80
+
+    is_valid, error = manager.validate_daily_loss()
+    assert is_valid is True
+
+
+def test_validate_daily_loss_exceeded():
+    config = RiskConfig(max_daily_loss=200.0)
+    manager = RiskManager(config)
+
+    # Record losses exceeding limit
+    manager.record_daily_pnl(-150.0)
+    manager.record_daily_pnl(-100.0)  # Total: -250
+
+    is_valid, error = manager.validate_daily_loss()
+    assert is_valid is False
+    assert "daily loss" in error.lower()
+
+
+def test_daily_loss_resets_on_new_day():
+    config = RiskConfig(max_daily_loss=200.0)
+    manager = RiskManager(config)
+
+    # Record loss
+    manager.record_daily_pnl(-150.0)
+
+    # Simulate new day
+    manager._current_date = date(2020, 1, 1)  # Force old date
+    manager._check_date_rollover()
+
+    assert manager._daily_pnl == 0.0
