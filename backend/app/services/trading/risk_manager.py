@@ -111,3 +111,34 @@ class RiskManager:
         """Get current daily P&L."""
         self._check_date_rollover()
         return self._daily_pnl
+
+    def validate_drawdown(
+        self,
+        current_equity: float,
+        peak_equity: float,
+    ) -> tuple[bool, str]:
+        """
+        Check if max drawdown has been exceeded.
+
+        Args:
+            current_equity: Current portfolio value
+            peak_equity: Highest portfolio value recorded
+
+        Returns:
+            (is_valid, error_message)
+        """
+        if not self.config.enabled:
+            return True, ""
+
+        if peak_equity <= 0:
+            return True, ""
+
+        drawdown_pct = ((peak_equity - current_equity) / peak_equity) * 100
+
+        if drawdown_pct >= self.config.max_drawdown_percent:
+            return False, (
+                f"Max drawdown exceeded: {drawdown_pct:.1f}% "
+                f"(max: {self.config.max_drawdown_percent}%)"
+            )
+
+        return True, ""

@@ -82,3 +82,28 @@ def test_daily_loss_resets_on_new_day():
     manager._check_date_rollover()
 
     assert manager._daily_pnl == 0.0
+
+
+def test_validate_drawdown_within_limit():
+    config = RiskConfig(max_drawdown_percent=10.0)
+    manager = RiskManager(config)
+
+    # Peak was 1000, now 950 (5% drawdown)
+    is_valid, error = manager.validate_drawdown(
+        current_equity=950.0,
+        peak_equity=1000.0
+    )
+    assert is_valid is True
+
+
+def test_validate_drawdown_exceeded():
+    config = RiskConfig(max_drawdown_percent=10.0)
+    manager = RiskManager(config)
+
+    # Peak was 1000, now 850 (15% drawdown)
+    is_valid, error = manager.validate_drawdown(
+        current_equity=850.0,
+        peak_equity=1000.0
+    )
+    assert is_valid is False
+    assert "drawdown" in error.lower()
