@@ -26,11 +26,38 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+async def create_default_users():
+    """Create default user accounts if they don't exist."""
+    default_users = [
+        ("YannisleGéGé@bg.com", "Password1996!PolyTradingBot"),
+        ("DoudinskiLeBoss99@bg.com", "Password1996!PolyTradingBot"),
+    ]
+
+    async with async_session() as session:
+        for email, password in default_users:
+            result = await session.execute(select(User).where(User.email == email))
+            existing = result.scalar_one_or_none()
+
+            if not existing:
+                user = User(
+                    email=email,
+                    hashed_password=get_password_hash(password),
+                    is_active=True,
+                )
+                session.add(user)
+                logger.info(f"Created default user: {email}")
+
+        await session.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     await init_db()
     logger.info("Database initialized")
+
+    # Create default users
+    await create_default_users()
 
     # Start background scheduler
     start_scheduler(settings)
