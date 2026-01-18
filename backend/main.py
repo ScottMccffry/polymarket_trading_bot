@@ -9,7 +9,7 @@ from app.database import init_db, async_session
 from app.models.user import User
 from app.auth.security import get_password_hash
 from sqlalchemy import select
-from app.routes import auth_router, signals_router, strategies_router, positions_router, markets_router, telegram_router, settings_router, bot_router, sources_router
+from app.routes import auth_router, signals_router, strategies_router, positions_router, markets_router, telegram_router, settings_router, bot_router, sources_router, analytics_router
 from app.services.scheduler import start_scheduler, stop_scheduler
 from app.websocket import websocket_router
 from app.services.scheduler.jobs import get_scheduler_status, run_harvest_now
@@ -82,6 +82,7 @@ app.include_router(telegram_router)
 app.include_router(settings_router)
 app.include_router(bot_router)
 app.include_router(sources_router)
+app.include_router(analytics_router)
 app.include_router(websocket_router)
 
 
