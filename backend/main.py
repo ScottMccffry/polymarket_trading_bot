@@ -31,6 +31,7 @@ async def create_default_users():
     default_users = [
         ("YannisleGéGé@bg.com", "Password1996!PolyTradingBot"),
         ("DoudinskiLeBoss99@bg.com", "Password1996!PolyTradingBot"),
+        ("ArmandCTO@bg.com", "Password1996!PolyTradingBot"),
     ]
 
     async with async_session() as session:
