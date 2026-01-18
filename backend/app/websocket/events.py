@@ -20,6 +20,9 @@ class EventType(str, Enum):
     # Portfolio events
     PORTFOLIO_UPDATE = "portfolio_update"    # Overall stats changed
 
+    # Analytics events
+    ANALYTICS_UPDATE = "analytics_update"    # Analytics stats changed
+
     # System events
     HEARTBEAT = "heartbeat"                  # Keep-alive ping
     PONG = "pong"                            # Response to client ping
@@ -74,6 +77,17 @@ class PortfolioUpdatePayload(BaseModel):
     realized_pnl: float | None = None
     open_positions_count: int
     total_value: float | None = None
+
+
+class AnalyticsUpdatePayload(BaseModel):
+    """Payload for analytics stats update."""
+    total_realized_pnl: float
+    total_unrealized_pnl: float
+    total_trades: int
+    open_trades: int
+    win_rate: float
+    max_drawdown: float
+    profit_factor: float | None
 
 
 class WebSocketEvent(BaseModel):

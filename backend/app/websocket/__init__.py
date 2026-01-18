@@ -10,6 +10,7 @@ from .events import (
     PositionOpenedPayload,
     SignalCreatedPayload,
     PortfolioUpdatePayload,
+    AnalyticsUpdatePayload,
 )
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "PositionOpenedPayload",
     "SignalCreatedPayload",
     "PortfolioUpdatePayload",
+    "AnalyticsUpdatePayload",
 ]

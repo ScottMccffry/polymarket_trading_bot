@@ -14,6 +14,7 @@ from ...models.position import Position
 from ..polymarket import MarketHarvester
 from ..trading import StrategyExecutor
 from ...websocket import manager as ws_manager, EventType, WebSocketEvent
+from ..analytics import AnalyticsCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -207,9 +208,33 @@ async def _broadcast_position_updates(positions: list[Position], exits: list[dic
         )
         await ws_manager.broadcast(portfolio_event.model_dump())
 
+        # Broadcast analytics summary (includes all positions for full metrics)
+        async with async_session() as db:
+            result = await db.execute(select(Position))
+            all_positions = result.scalars().all()
+
+        calc = AnalyticsCalculator(all_positions)
+        basic = calc.calculate_basic_metrics()
+        risk = calc.calculate_risk_metrics()
+        efficiency = calc.calculate_efficiency_metrics()
+
+        analytics_event = WebSocketEvent.create(
+            EventType.ANALYTICS_UPDATE,
+            {
+                "total_realized_pnl": basic.total_realized_pnl,
+                "total_unrealized_pnl": basic.total_unrealized_pnl,
+                "total_trades": basic.total_trades,
+                "open_trades": basic.open_trades,
+                "win_rate": basic.win_rate,
+                "max_drawdown": risk.max_drawdown,
+                "profit_factor": efficiency.profit_factor,
+            }
+        )
+        await ws_manager.broadcast(analytics_event.model_dump())
+
         logger.debug(
             f"[WebSocket] Broadcast: {len(positions_data)} positions, "
-            f"{len(exits)} exits, portfolio update"
+            f"{len(exits)} exits, portfolio update, analytics update"
         )
 
     except Exception as e:
