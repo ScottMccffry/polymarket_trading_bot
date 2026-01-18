@@ -324,6 +324,130 @@ export interface PriceHistoryResponse {
   history: PriceHistoryPoint[];
 }
 
+// Analytics interfaces
+export interface BasicMetrics {
+  total_realized_pnl: number;
+  total_realized_pnl_percent: number;
+  total_unrealized_pnl: number;
+  total_unrealized_pnl_percent: number;
+  total_trades: number;
+  open_trades: number;
+  closed_trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  avg_win: number;
+  avg_loss: number;
+  best_trade: number;
+  worst_trade: number;
+}
+
+export interface RiskMetrics {
+  sharpe_ratio: number | null;
+  sortino_ratio: number | null;
+  max_drawdown: number;
+  max_drawdown_percent: number;
+  current_drawdown: number;
+  current_drawdown_percent: number;
+  risk_reward_ratio: number | null;
+  calmar_ratio: number | null;
+}
+
+export interface EfficiencyMetrics {
+  profit_factor: number | null;
+  expectancy: number;
+  avg_hold_time_hours: number | null;
+  trades_per_day: number;
+  longest_win_streak: number;
+  longest_loss_streak: number;
+  current_streak: number;
+  current_streak_type: "win" | "loss" | "none";
+}
+
+export interface AnalyticsSummary {
+  basic: BasicMetrics;
+  risk: RiskMetrics;
+  efficiency: EfficiencyMetrics;
+  total_invested: number;
+  filters_applied: Record<string, string>;
+}
+
+export interface GroupedAnalytics {
+  group_key: string;
+  group_value: string;
+  summary: AnalyticsSummary;
+}
+
+export interface AnalyticsSummaryResponse {
+  totals: AnalyticsSummary;
+  groups: GroupedAnalytics[];
+}
+
+export interface TimeseriesPoint {
+  timestamp: string;
+  value: number;
+  group: string | null;
+}
+
+export interface TimeseriesResponse {
+  metric: string;
+  granularity: string;
+  data: TimeseriesPoint[];
+}
+
+export interface HeatmapCell {
+  x: string;
+  y: string | null;
+  value: number;
+  count: number;
+}
+
+export interface HeatmapResponse {
+  dimension: string;
+  metric: string;
+  cells: HeatmapCell[];
+}
+
+export interface TradeRecord {
+  id: number;
+  market_question: string | null;
+  side: string | null;
+  entry_price: number | null;
+  exit_price: number | null;
+  size: number | null;
+  realized_pnl: number | null;
+  realized_pnl_percent: number | null;
+  status: string;
+  strategy_name: string | null;
+  source: string | null;
+  trading_mode: string | null;
+  opened_at: string | null;
+  closed_at: string | null;
+  hold_time_hours: number | null;
+}
+
+export interface TradesResponse {
+  trades: TradeRecord[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface FilterOptions {
+  strategies: string[];
+  sources: string[];
+  trading_modes: string[];
+}
+
+export interface AnalyticsFilters {
+  trading_mode?: string;
+  status?: string;
+  strategy_name?: string;
+  source?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
 export interface StrategyOverview {
   strategy_id: number | null;
   strategy_name: string;
@@ -825,6 +949,82 @@ class ApiClient {
     return this.request(`/api/sources/${id}/toggle`, {
       method: "PATCH",
     });
+  }
+
+  // Analytics
+  async getAnalyticsSummary(filters: AnalyticsFilters = {}): Promise<AnalyticsSummaryResponse> {
+    const params = new URLSearchParams();
+    if (filters.trading_mode && filters.trading_mode !== "all") params.append("trading_mode", filters.trading_mode);
+    if (filters.status && filters.status !== "all") params.append("status", filters.status);
+    if (filters.strategy_name) params.append("strategy_name", filters.strategy_name);
+    if (filters.source) params.append("source", filters.source);
+    if (filters.start_date) params.append("start_date", filters.start_date);
+    if (filters.end_date) params.append("end_date", filters.end_date);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return this.request<AnalyticsSummaryResponse>(`/api/analytics/summary${query}`);
+  }
+
+  async getAnalyticsSummaryGrouped(filters: AnalyticsFilters = {}, groupBy: string): Promise<AnalyticsSummaryResponse> {
+    const params = new URLSearchParams();
+    params.append("group_by", groupBy);
+    if (filters.trading_mode && filters.trading_mode !== "all") params.append("trading_mode", filters.trading_mode);
+    if (filters.status && filters.status !== "all") params.append("status", filters.status);
+    if (filters.strategy_name) params.append("strategy_name", filters.strategy_name);
+    if (filters.source) params.append("source", filters.source);
+    if (filters.start_date) params.append("start_date", filters.start_date);
+    if (filters.end_date) params.append("end_date", filters.end_date);
+    return this.request<AnalyticsSummaryResponse>(`/api/analytics/summary?${params.toString()}`);
+  }
+
+  async getAnalyticsTimeseries(
+    metric: "equity" | "pnl" | "drawdown" = "equity",
+    granularity: "daily" | "weekly" | "monthly" = "daily",
+    filters: AnalyticsFilters = {}
+  ): Promise<TimeseriesResponse> {
+    const params = new URLSearchParams();
+    params.append("metric", metric);
+    params.append("granularity", granularity);
+    if (filters.trading_mode && filters.trading_mode !== "all") params.append("trading_mode", filters.trading_mode);
+    if (filters.strategy_name) params.append("strategy_name", filters.strategy_name);
+    if (filters.source) params.append("source", filters.source);
+    if (filters.start_date) params.append("start_date", filters.start_date);
+    if (filters.end_date) params.append("end_date", filters.end_date);
+    return this.request<TimeseriesResponse>(`/api/analytics/timeseries?${params.toString()}`);
+  }
+
+  async getAnalyticsHeatmap(
+    dimension: "day_of_week" | "hour_of_day" | "month" = "day_of_week",
+    metric: "pnl" | "win_rate" | "trade_count" = "pnl",
+    tradingMode?: string
+  ): Promise<HeatmapResponse> {
+    const params = new URLSearchParams();
+    params.append("dimension", dimension);
+    params.append("metric", metric);
+    if (tradingMode && tradingMode !== "all") params.append("trading_mode", tradingMode);
+    return this.request<HeatmapResponse>(`/api/analytics/heatmap?${params.toString()}`);
+  }
+
+  async getAnalyticsTrades(
+    filters: AnalyticsFilters = {},
+    sortBy = "closed_at",
+    order: "asc" | "desc" = "desc",
+    limit = 100,
+    offset = 0
+  ): Promise<TradesResponse> {
+    const params = new URLSearchParams();
+    params.append("sort_by", sortBy);
+    params.append("order", order);
+    params.append("limit", String(limit));
+    params.append("offset", String(offset));
+    if (filters.trading_mode && filters.trading_mode !== "all") params.append("trading_mode", filters.trading_mode);
+    if (filters.status && filters.status !== "all") params.append("status", filters.status);
+    if (filters.strategy_name) params.append("strategy_name", filters.strategy_name);
+    if (filters.source) params.append("source", filters.source);
+    return this.request<TradesResponse>(`/api/analytics/trades?${params.toString()}`);
+  }
+
+  async getAnalyticsFilterOptions(): Promise<FilterOptions> {
+    return this.request<FilterOptions>("/api/analytics/filter-options");
   }
 }
 
