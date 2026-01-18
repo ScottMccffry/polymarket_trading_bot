@@ -8,6 +8,8 @@ import {
   QdrantSettings,
   QdrantStatus,
   SignalTestResponse,
+  WalletSettings,
+  User,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,12 +125,69 @@ export default function Settings() {
   const [simulationResult, setSimulationResult] = useState<SignalTestResponse | null>(null);
   const [simulationError, setSimulationError] = useState("");
 
+  // User state (for admin check)
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  // Wallet state (admin only)
+  const [walletSettings, setWalletSettings] = useState<WalletSettings | null>(null);
+  const [walletPrivateKey, setWalletPrivateKey] = useState("");
+  const [walletAddress, setWalletAddress] = useState("");
+  const [walletLiveEnabled, setWalletLiveEnabled] = useState(false);
+  const [walletSaving, setWalletSaving] = useState(false);
+  const [walletMessage, setWalletMessage] = useState("");
+
   // Load settings on mount
   useEffect(() => {
+    loadCurrentUser();
     loadAllSettings();
     checkTelegramStatus();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadCurrentUser = async () => {
+    try {
+      const user = await api.getMe();
+      setCurrentUser(user);
+      // If admin, load wallet settings
+      if (user.is_admin) {
+        loadWalletSettings();
+      }
+    } catch (error) {
+      console.error("Failed to load current user:", error);
+    }
+  };
+
+  const loadWalletSettings = async () => {
+    try {
+      const settings = await api.getWalletSettings();
+      setWalletSettings(settings);
+      setWalletAddress(settings.funder_address || "");
+      setWalletLiveEnabled(settings.live_trading_enabled);
+    } catch (error) {
+      console.error("Failed to load wallet settings:", error);
+    }
+  };
+
+  const saveWalletSettings = async () => {
+    setWalletSaving(true);
+    setWalletMessage("");
+    try {
+      const update: Record<string, unknown> = {
+        funder_address: walletAddress,
+        live_trading_enabled: walletLiveEnabled,
+      };
+      if (walletPrivateKey) update.private_key = walletPrivateKey;
+
+      const result = await api.updateWalletSettings(update);
+      setWalletSettings(result);
+      setWalletMessage("Saved successfully");
+      setWalletPrivateKey(""); // Clear password field after save
+    } catch (error) {
+      setWalletMessage(`Error: ${error}`);
+    } finally {
+      setWalletSaving(false);
+    }
+  };
 
   const loadAllSettings = async () => {
     try {
@@ -657,6 +716,72 @@ export default function Settings() {
               </div>
             </div>
           </ConfigSection>
+
+          {/* Wallet Settings (Admin Only) */}
+          {currentUser?.is_admin && (
+            <ConfigSection
+              title="Wallet Configuration"
+              description="Admin only - Private key & address"
+              defaultOpen
+            >
+              <CardDescription className="mb-4">
+                Configure the Polymarket wallet for live trading. Only admins can modify these settings.
+              </CardDescription>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="wallet-address">Wallet Address</Label>
+                  <Input
+                    id="wallet-address"
+                    value={walletAddress}
+                    onChange={(e) => setWalletAddress(e.target.value)}
+                    placeholder="0x..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="wallet-private-key">Private Key</Label>
+                  <Input
+                    id="wallet-private-key"
+                    type="password"
+                    value={walletPrivateKey}
+                    onChange={(e) => setWalletPrivateKey(e.target.value)}
+                    placeholder={walletSettings?.private_key_masked || "Enter private key"}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Your private key is stored securely and never displayed in full.
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="wallet-live-enabled"
+                    checked={walletLiveEnabled}
+                    onChange={(e) => setWalletLiveEnabled(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <Label htmlFor="wallet-live-enabled" className="text-sm font-medium">
+                    Enable Live Trading
+                  </Label>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Button onClick={saveWalletSettings} disabled={walletSaving}>
+                    {walletSaving ? "Saving..." : "Save Wallet Settings"}
+                  </Button>
+                  {walletMessage && (
+                    <span
+                      className={cn(
+                        "text-sm",
+                        walletMessage.startsWith("Error")
+                          ? "text-destructive"
+                          : "text-green-500"
+                      )}
+                    >
+                      {walletMessage}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </ConfigSection>
+          )}
 
           {/* Signal Simulation */}
           <ConfigSection

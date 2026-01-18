@@ -28,14 +28,15 @@ settings = get_settings()
 
 async def create_default_users():
     """Create default user accounts if they don't exist."""
+    # (email, password, is_admin)
     default_users = [
-        ("YannisleGéGé@bg.com", "Password1996!PolyTradingBot"),
-        ("DoudinskiLeBoss99@bg.com", "Password1996!PolyTradingBot"),
-        ("ArmandCTO@bg.com", "Password1996!PolyTradingBot"),
+        ("YannisleGéGé@bg.com", "Password1996!PolyTradingBot", False),
+        ("DoudinskiLeBoss99@bg.com", "Password1996!PolyTradingBot", False),
+        ("ArmandCTO@bg.com", "Password1996!PolyTradingBot", True),  # Admin
     ]
 
     async with async_session() as session:
-        for email, password in default_users:
+        for email, password, is_admin in default_users:
             result = await session.execute(select(User).where(User.email == email))
             existing = result.scalar_one_or_none()
 
@@ -44,9 +45,14 @@ async def create_default_users():
                     email=email,
                     hashed_password=get_password_hash(password),
                     is_active=True,
+                    is_admin=is_admin,
                 )
                 session.add(user)
-                logger.info(f"Created default user: {email}")
+                logger.info(f"Created default user: {email} (admin={is_admin})")
+            elif existing and is_admin and not existing.is_admin:
+                # Update existing user to admin if needed
+                existing.is_admin = True
+                logger.info(f"Updated user {email} to admin")
 
         await session.commit()
 

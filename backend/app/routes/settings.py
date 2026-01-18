@@ -7,12 +7,20 @@ from pydantic import BaseModel
 
 from ..config import get_settings
 from ..auth.security import get_current_user
+from ..models.user import User
 
 router = APIRouter(
     prefix="/api/settings",
     tags=["settings"],
     dependencies=[Depends(get_current_user)]
 )
+
+
+async def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    """Require admin privileges."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
 
 # Settings file path
 SETTINGS_FILE = Path("data/settings.json")
@@ -257,4 +265,56 @@ async def update_qdrant_settings(update: QdrantSettingsUpdate):
         url=saved.get("qdrant_url", ""),
         api_key_masked=_mask_value(saved.get("qdrant_api_key", "")),
         collection_name=saved.get("qdrant_collection_name", "polymarket_markets"),
+    )
+
+
+# Wallet settings (admin only)
+class WalletSettingsResponse(BaseModel):
+    private_key_masked: str
+    funder_address: str
+    live_trading_enabled: bool
+
+
+class WalletSettingsUpdate(BaseModel):
+    private_key: str | None = None
+    funder_address: str | None = None
+    live_trading_enabled: bool | None = None
+
+
+@router.get("/wallet", response_model=WalletSettingsResponse)
+async def get_wallet_settings(admin: User = Depends(get_admin_user)):
+    """Get wallet settings (admin only)."""
+    saved = _load_saved_settings()
+    env_settings = get_settings()
+
+    private_key = saved.get("polymarket_private_key") or env_settings.polymarket_private_key
+    funder_address = saved.get("polymarket_funder_address") or env_settings.polymarket_funder_address
+    live_enabled = saved.get("live_trading_enabled", env_settings.live_trading_enabled)
+
+    return WalletSettingsResponse(
+        private_key_masked=_mask_value(private_key, 6),
+        funder_address=funder_address,
+        live_trading_enabled=live_enabled,
+    )
+
+
+@router.put("/wallet", response_model=WalletSettingsResponse)
+async def update_wallet_settings(update: WalletSettingsUpdate, admin: User = Depends(get_admin_user)):
+    """Update wallet settings (admin only)."""
+    saved = _load_saved_settings()
+
+    if update.private_key is not None:
+        saved["polymarket_private_key"] = update.private_key
+    if update.funder_address is not None:
+        saved["polymarket_funder_address"] = update.funder_address
+    if update.live_trading_enabled is not None:
+        saved["live_trading_enabled"] = update.live_trading_enabled
+
+    _save_settings(saved)
+    get_settings.cache_clear()
+
+    return WalletSettingsResponse(
+        private_key_masked=_mask_value(saved.get("polymarket_private_key", ""), 6),
+        funder_address=saved.get("polymarket_funder_address", ""),
+        live_trading_enabled=saved.get("live_trading_enabled", False),
     )

@@ -4,6 +4,7 @@ export interface User {
   id: number;
   email: string;
   is_active: boolean;
+  is_admin: boolean;
 }
 
 export interface LoginCredentials {
@@ -273,6 +274,18 @@ export interface QdrantSettingsUpdate {
   url?: string;
   api_key?: string;
   collection_name?: string;
+}
+
+export interface WalletSettings {
+  private_key_masked: string;
+  funder_address: string;
+  live_trading_enabled: boolean;
+}
+
+export interface WalletSettingsUpdate {
+  private_key?: string;
+  funder_address?: string;
+  live_trading_enabled?: boolean;
 }
 
 export interface AllSettings {
@@ -811,6 +824,18 @@ class ApiClient {
 
   async updateQdrantSettings(settings: QdrantSettingsUpdate): Promise<QdrantSettings> {
     return this.request<QdrantSettings>("/api/settings/qdrant", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    });
+  }
+
+  // Wallet Settings (Admin only)
+  async getWalletSettings(): Promise<WalletSettings> {
+    return this.request<WalletSettings>("/api/settings/wallet");
+  }
+
+  async updateWalletSettings(settings: WalletSettingsUpdate): Promise<WalletSettings> {
+    return this.request<WalletSettings>("/api/settings/wallet", {
       method: "PUT",
       body: JSON.stringify(settings),
     });
