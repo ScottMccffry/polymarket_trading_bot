@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import OrderArgs, OrderType
+from py_clob_client.clob_types import OrderArgs, OrderType, BalanceAllowanceParams, AssetType
 from py_clob_client.order_builder.constants import BUY, SELL
 
 from ...config import Settings, get_settings
@@ -308,7 +308,17 @@ class ClobTradingClient:
     def get_balances(self) -> dict:
         """Get wallet balances (USDC, collateral)."""
         try:
-            return self.client.get_balance_allowance()
+            # Get USDC (collateral) balance
+            usdc_params = BalanceAllowanceParams(
+                asset_type=AssetType.COLLATERAL,
+                signature_type=self.signature_type or 0
+            )
+            usdc_result = self.client.get_balance_allowance(usdc_params)
+
+            return {
+                "USDC": usdc_result.get("balance", "0"),
+                "allowances": usdc_result.get("allowances", {})
+            }
         except Exception as e:
             logger.error(f"[TRADING] Get balances failed: {e}")
             return {"error": str(e)}
