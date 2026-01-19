@@ -819,16 +819,9 @@ export default function Settings() {
                     ) : walletBalances ? (
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                          <span className="text-muted-foreground">USDC</span>
+                          <span className="text-muted-foreground">USDC Balance</span>
                           <span className="text-2xl font-bold text-green-500">
-                            ${parseFloat(walletBalances.USDC || "0").toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                        <Separator />
-                        <div className="flex justify-between items-center">
-                          <span className="text-muted-foreground text-sm">Collateral</span>
-                          <span className="text-sm font-medium">
-                            ${parseFloat(walletBalances.CONDITIONAL || "0").toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ${parseFloat(walletBalances.USDC || "0").toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
                           </span>
                         </div>
                       </div>

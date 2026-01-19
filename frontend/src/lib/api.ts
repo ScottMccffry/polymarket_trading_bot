@@ -284,7 +284,7 @@ export interface WalletSettings {
 
 export interface WalletBalances {
   USDC?: string;
-  CONDITIONAL?: string;
+  allowances?: Record<string, string>;
   error?: string;
 }
 
