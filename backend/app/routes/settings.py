@@ -313,6 +313,10 @@ async def update_wallet_settings(update: WalletSettingsUpdate, admin: User = Dep
     _save_settings(saved)
     get_settings.cache_clear()
 
+    # Reload trading client to pick up new credentials
+    from ..services.polymarket.trading_client import trading_client
+    trading_client.reload_settings()
+
     return WalletSettingsResponse(
         private_key_masked=_mask_value(saved.get("polymarket_private_key", ""), 6),
         funder_address=saved.get("polymarket_funder_address", ""),
