@@ -9,6 +9,7 @@ import {
   QdrantStatus,
   SignalTestResponse,
   WalletSettings,
+  WalletBalances,
   User,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -135,6 +136,8 @@ export default function Settings() {
   const [walletLiveEnabled, setWalletLiveEnabled] = useState(false);
   const [walletSaving, setWalletSaving] = useState(false);
   const [walletMessage, setWalletMessage] = useState("");
+  const [walletBalances, setWalletBalances] = useState<WalletBalances | null>(null);
+  const [walletBalancesLoading, setWalletBalancesLoading] = useState(false);
 
   // Load settings on mount
   useEffect(() => {
@@ -163,8 +166,25 @@ export default function Settings() {
       setWalletSettings(settings);
       setWalletAddress(settings.funder_address || "");
       setWalletLiveEnabled(settings.live_trading_enabled);
+      // Also load balances if wallet is configured
+      if (settings.funder_address) {
+        loadWalletBalances();
+      }
     } catch (error) {
       console.error("Failed to load wallet settings:", error);
+    }
+  };
+
+  const loadWalletBalances = async () => {
+    setWalletBalancesLoading(true);
+    try {
+      const balances = await api.getWalletBalances();
+      setWalletBalances(balances);
+    } catch (error) {
+      console.error("Failed to load wallet balances:", error);
+      setWalletBalances({ error: "Failed to load balances" });
+    } finally {
+      setWalletBalancesLoading(false);
     }
   };
 
@@ -727,58 +747,114 @@ export default function Settings() {
               <CardDescription className="mb-4">
                 Configure the Polymarket wallet for live trading. Only admins can modify these settings.
               </CardDescription>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="wallet-address">Wallet Address</Label>
-                  <Input
-                    id="wallet-address"
-                    value={walletAddress}
-                    onChange={(e) => setWalletAddress(e.target.value)}
-                    placeholder="0x..."
-                  />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Settings form */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="wallet-address">Wallet Address</Label>
+                    <Input
+                      id="wallet-address"
+                      value={walletAddress}
+                      onChange={(e) => setWalletAddress(e.target.value)}
+                      placeholder="0x..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="wallet-private-key">Private Key</Label>
+                    <Input
+                      id="wallet-private-key"
+                      type="password"
+                      value={walletPrivateKey}
+                      onChange={(e) => setWalletPrivateKey(e.target.value)}
+                      placeholder={walletSettings?.private_key_masked || "Enter private key"}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Your private key is stored securely and never displayed in full.
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="wallet-live-enabled"
+                      checked={walletLiveEnabled}
+                      onChange={(e) => setWalletLiveEnabled(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <Label htmlFor="wallet-live-enabled" className="text-sm font-medium">
+                      Enable Live Trading
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Button onClick={saveWalletSettings} disabled={walletSaving}>
+                      {walletSaving ? "Saving..." : "Save Wallet Settings"}
+                    </Button>
+                    {walletMessage && (
+                      <span
+                        className={cn(
+                          "text-sm",
+                          walletMessage.startsWith("Error")
+                            ? "text-destructive"
+                            : "text-green-500"
+                        )}
+                      >
+                        {walletMessage}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="wallet-private-key">Private Key</Label>
-                  <Input
-                    id="wallet-private-key"
-                    type="password"
-                    value={walletPrivateKey}
-                    onChange={(e) => setWalletPrivateKey(e.target.value)}
-                    placeholder={walletSettings?.private_key_masked || "Enter private key"}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Your private key is stored securely and never displayed in full.
-                  </p>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="wallet-live-enabled"
-                    checked={walletLiveEnabled}
-                    onChange={(e) => setWalletLiveEnabled(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  <Label htmlFor="wallet-live-enabled" className="text-sm font-medium">
-                    Enable Live Trading
-                  </Label>
-                </div>
-                <div className="flex items-center gap-4">
-                  <Button onClick={saveWalletSettings} disabled={walletSaving}>
-                    {walletSaving ? "Saving..." : "Save Wallet Settings"}
-                  </Button>
-                  {walletMessage && (
-                    <span
-                      className={cn(
-                        "text-sm",
-                        walletMessage.startsWith("Error")
-                          ? "text-destructive"
-                          : "text-green-500"
-                      )}
+
+                {/* Wallet Balance Panel */}
+                <Card className="bg-muted/50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold">Wallet Balance</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {walletBalancesLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading balances...
+                      </div>
+                    ) : walletBalances?.error ? (
+                      <p className="text-sm text-destructive">{walletBalances.error}</p>
+                    ) : walletBalances ? (
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">USDC</span>
+                          <span className="text-2xl font-bold text-green-500">
+                            ${parseFloat(walletBalances.USDC || "0").toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <Separator />
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground text-sm">Collateral</span>
+                          <span className="text-sm font-medium">
+                            ${parseFloat(walletBalances.CONDITIONAL || "0").toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Configure wallet to view balances
+                      </p>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4 w-full"
+                      onClick={loadWalletBalances}
+                      disabled={walletBalancesLoading || !walletSettings?.funder_address}
                     >
-                      {walletMessage}
-                    </span>
-                  )}
-                </div>
+                      {walletBalancesLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Refreshing...
+                        </>
+                      ) : (
+                        "Refresh Balance"
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
             </ConfigSection>
           )}

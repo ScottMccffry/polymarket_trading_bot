@@ -282,6 +282,12 @@ export interface WalletSettings {
   live_trading_enabled: boolean;
 }
 
+export interface WalletBalances {
+  USDC?: string;
+  CONDITIONAL?: string;
+  error?: string;
+}
+
 export interface WalletSettingsUpdate {
   private_key?: string;
   funder_address?: string;
@@ -839,6 +845,10 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify(settings),
     });
+  }
+
+  async getWalletBalances(): Promise<WalletBalances> {
+    return this.request<WalletBalances>("/api/bot/trading/balances");
   }
 
   async getQdrantStatus(): Promise<QdrantStatus> {

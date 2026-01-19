@@ -47,3 +47,48 @@ async def get_db_context():
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Run migrations for new columns
+    await run_migrations()
+
+
+async def run_migrations():
+    """Add missing columns to existing tables."""
+    from sqlalchemy import text
+
+    # New columns to add to positions table
+    position_columns = [
+        ("entry_order_id", "VARCHAR(255)"),
+        ("entry_order_status", "VARCHAR(50)"),
+        ("exit_order_id", "VARCHAR(255)"),
+        ("exit_order_status", "VARCHAR(50)"),
+        ("shares_ordered", "FLOAT"),
+        ("shares_filled", "FLOAT"),
+        ("average_fill_price", "FLOAT"),
+        ("trading_mode", "VARCHAR(50)"),
+        ("last_order_error", "TEXT"),
+    ]
+
+    # New column for users table
+    user_columns = [
+        ("is_admin", "BOOLEAN DEFAULT FALSE"),
+    ]
+
+    async with engine.begin() as conn:
+        # Add position columns
+        for col_name, col_type in position_columns:
+            try:
+                await conn.execute(text(
+                    f"ALTER TABLE positions ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+                ))
+            except Exception:
+                pass  # Column might already exist or syntax differs
+
+        # Add user columns
+        for col_name, col_type in user_columns:
+            try:
+                await conn.execute(text(
+                    f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+                ))
+            except Exception:
+                pass
